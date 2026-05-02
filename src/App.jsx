@@ -1,3 +1,4 @@
+import React from 'react'
 import { useState, useEffect, Component } from "react";
 
 export class ErrorBoundary extends Component {
