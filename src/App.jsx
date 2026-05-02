@@ -210,58 +210,84 @@ function AdminLock({ onUnlock, savedPw }) {
   );
 }
 
-// ── 위치 입력 컴포넌트 ──────────────────────────────────────
+// ── 위치 입력 컴포넌트 (드롭다운 + 직접입력) ──────────────
 function LocButtons({ list, value, onChange, placeholder }) {
-  const [inputVal, setInputVal] = useState("");
+  const [open, setOpen] = useState(false);
+  const [inputVal, setInputVal] = useState(value || "");
   const allList = list || [];
+  const blurRef = React.useRef(null);
 
-  const select = (l) => { onChange(l); setInputVal(""); };
+  useEffect(() => {
+    setInputVal(value || "");
+  }, [value]);
 
   const filtered = inputVal.trim()
     ? allList.filter(l => l.includes(inputVal.trim()))
-    : allList;
+    : allList.slice(0, 20);
+
+  const select = (l) => {
+    clearTimeout(blurRef.current);
+    onChange(l);
+    setInputVal(l);
+    setOpen(false);
+  };
+
+  const handleFocus = () => setOpen(true);
+
+  const handleBlur = () => {
+    blurRef.current = setTimeout(() => {
+      if (inputVal.trim()) onChange(inputVal.trim());
+      setOpen(false);
+    }, 200);
+  };
+
+  const handleChange = (e) => {
+    setInputVal(e.target.value);
+    setOpen(true);
+  };
 
   return (
-    <div>
-      {/* 선택된 값 표시 */}
-      {value && (
-        <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:8 }}>
-          <span style={{ flex:1, background:"#f5a623", color:"#000", borderRadius:20, padding:"8px 14px", fontSize:14, fontWeight:700 }}>{value}</span>
-          <button onClick={() => { onChange(""); setInputVal(""); }} style={{ background:"transparent", border:"none", color:"#e74c3c", fontSize:22, cursor:"pointer", lineHeight:1 }}>×</button>
-        </div>
-      )}
-
-      {/* 목록 버튼들 — 항상 표시 */}
-      {filtered.length > 0 && (
-        <div style={{ display:"flex", flexWrap:"wrap", gap:6, marginBottom:8 }}>
-          {filtered.map(l => (
-            <button key={l} onClick={() => select(l)} style={{
-              padding:"8px 14px", borderRadius:20, fontSize:13, cursor:"pointer",
-              background: value === l ? "#f5a623" : "#22263a",
-              color: value === l ? "#000" : "#9da3b4",
-              border: `1px solid ${value === l ? "#f5a623" : "#3a3f5a"}`,
-              fontWeight: value === l ? 700 : 400,
-              WebkitTapHighlightColor:"transparent"
-            }}>{l}</button>
-          ))}
-        </div>
-      )}
-
-      {/* 직접 입력창 — 항상 표시 */}
+    <div style={{ position:"relative" }}>
       <input
         type="text"
         value={inputVal}
-        onChange={e => { setInputVal(e.target.value); if(!e.target.value.trim()) onChange(""); }}
-        onBlur={e => { if(e.target.value.trim()) onChange(e.target.value.trim()); }}
-        placeholder={placeholder || "목록에 없으면 직접 입력"}
+        onChange={handleChange}
+        onFocus={handleFocus}
+        onBlur={handleBlur}
+        placeholder={placeholder || "눌러서 선택하거나 직접 입력"}
         autoComplete="off"
-        style={{ width:"100%", background:"#22263a", border:"1.5px solid #2e3250", borderRadius:10, padding:"10px 14px", color:"#e8eaf0", fontSize:14, outline:"none" }}
+        autoCorrect="off"
+        autoCapitalize="off"
+        spellCheck={false}
+        style={{ width:"100%", background:"#22263a", border:`1.5px solid ${open?"#f5a623":"#2e3250"}`, borderRadius:10, padding:"11px 14px", color:"#e8eaf0", fontSize:15, outline:"none" }}
       />
+      {open && filtered.length > 0 && (
+        <div style={{
+          position:"absolute", top:"calc(100% + 4px)", left:0, right:0, zIndex:300,
+          background:"#1a1d27", border:"1.5px solid #3a3f5a", borderRadius:10,
+          maxHeight:200, overflowY:"auto",
+          boxShadow:"0 6px 24px rgba(0,0,0,0.8)"
+        }}>
+          {filtered.map(l => (
+            <div key={l}
+              onTouchStart={e => { e.preventDefault(); clearTimeout(blurRef.current); select(l); }}
+              onMouseDown={e => { e.preventDefault(); select(l); }}
+              style={{
+                padding:"12px 14px", fontSize:15, cursor:"pointer",
+                color: value===l ? "#f5a623" : "#e8eaf0",
+                background: value===l ? "#0f2a0f" : "transparent",
+                fontWeight: value===l ? 700 : 400,
+                borderBottom:"1px solid #2e325040",
+                WebkitTapHighlightColor:"transparent"
+              }}>{l}</div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
 
-function ReportForm({ vehicles, locationHints, locations, onSave }) {
+function ReportForm({ vehicles, locationHints, locations, records, onSave }) {
   const emptyWork = { material: "", qty: "", unit: "개" };
   const emptyTrip = { from: "", to: "", work: { ...emptyWork } };
 
@@ -273,8 +299,11 @@ function ReportForm({ vehicles, locationHints, locations, onSave }) {
   const [err, setErr]         = useState("");
 
   // 상·하차지 목록: locations 스토리지 + 일보 기록 합산
-  const fromList = [...new Set([...(locations?.from||[]), ...locationHints.filter(Boolean)])].sort();
-  const toList   = [...new Set([...(locations?.to  ||[]), ...locationHints.filter(Boolean)])].sort();
+  // 상차지: locations.from + 일보의 from만
+  const fromHints = records ? records.filter(r=>r.type==="report"&&r.from).map(r=>r.from) : [];
+  const toHints   = records ? records.filter(r=>r.type==="report"&&r.to).map(r=>r.to)     : [];
+  const fromList  = [...new Set([...(locations?.from||[]), ...fromHints])].sort();
+  const toList    = [...new Set([...(locations?.to  ||[]), ...toHints  ])].sort();
 
   const addTrip = () => {
     if (trips.length >= 10) return;
@@ -1025,9 +1054,11 @@ function LocManagePanel({ locations, setLocations, records, onBulkRename }) {
   const autoFrom = [...new Set(records.filter(r=>r.type==="report"&&r.from).map(r=>r.from))].sort();
   const autoTo   = [...new Set(records.filter(r=>r.type==="report"&&r.to).map(r=>r.to))].sort();
 
-  // 전체 목록 = 자동수집 + 관리자 등록 (중복제거)
-  const allFrom = [...new Set([...(locations.from||[]), ...autoFrom])].sort();
-  const allTo   = [...new Set([...(locations.to||[]),   ...autoTo  ])].sort();
+  // 전체 목록 = 자동수집 + 관리자 등록 (중복제거, 제외목록 반영)
+  const excludedFrom = locations.from_excluded || [];
+  const excludedTo   = locations.to_excluded   || [];
+  const allFrom = [...new Set([...(locations.from||[]), ...autoFrom])].filter(x => !excludedFrom.includes(x)).sort();
+  const allTo   = [...new Set([...(locations.to||[]),   ...autoTo  ])].filter(x => !excludedTo.includes(x)).sort();
 
   const startEdit = (type, loc) => {
     setEditingLoc({ type, old: loc });
@@ -1051,7 +1082,12 @@ function LocManagePanel({ locations, setLocations, records, onBulkRename }) {
   };
 
   const removeLoc = (type, loc) => {
-    setLocations(prev => ({ ...prev, [type]: (prev[type]||[]).filter(x => x !== loc) }));
+    // locations 스토리지에서 삭제 + 제외목록에 추가
+    setLocations(prev => ({
+      ...prev,
+      [type]: (prev[type]||[]).filter(x => x !== loc),
+      [type+"_excluded"]: [...(prev[type+"_excluded"]||[]), loc]
+    }));
   };
 
   return (
@@ -2239,7 +2275,7 @@ export default function App() {
           <>
             <Nav />
             <div style={{ background: C.card, borderLeft: `1px solid ${C.border}`, borderRight: `1px solid ${C.border}`, minHeight: "calc(100vh - 110px)" }}>
-              <ReportForm vehicles={vehicles} locationHints={locationHints} locations={locations} onSave={saveRecord} />
+              <ReportForm vehicles={vehicles} locationHints={locationHints} locations={locations} records={records} onSave={saveRecord} />
             </div>
           </>
         )}
