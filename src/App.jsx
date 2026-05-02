@@ -210,13 +210,12 @@ function AdminLock({ onUnlock, savedPw }) {
   );
 }
 
-// ── 위치 입력 컴포넌트 (목록 버튼 + 직접입력 병행) ──────────
+// ── 위치 입력 컴포넌트 ──────────────────────────────────────
 function LocButtons({ list, value, onChange, placeholder }) {
-  const [showInput, setShowInput] = useState(false);
   const [inputVal, setInputVal] = useState("");
   const allList = list || [];
 
-  const select = (l) => { onChange(l); setShowInput(false); setInputVal(""); };
+  const select = (l) => { onChange(l); setInputVal(""); };
 
   const filtered = inputVal.trim()
     ? allList.filter(l => l.includes(inputVal.trim()))
@@ -225,17 +224,17 @@ function LocButtons({ list, value, onChange, placeholder }) {
   return (
     <div>
       {/* 선택된 값 표시 */}
-      {value && !showInput && (
-        <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:6 }}>
+      {value && (
+        <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:8 }}>
           <span style={{ flex:1, background:"#f5a623", color:"#000", borderRadius:20, padding:"8px 14px", fontSize:14, fontWeight:700 }}>{value}</span>
-          <button onClick={() => { onChange(""); }} style={{ background:"transparent", border:"none", color:"#e74c3c", fontSize:20, cursor:"pointer" }}>×</button>
+          <button onClick={() => { onChange(""); setInputVal(""); }} style={{ background:"transparent", border:"none", color:"#e74c3c", fontSize:22, cursor:"pointer", lineHeight:1 }}>×</button>
         </div>
       )}
 
-      {/* 목록 버튼들 */}
-      {!showInput && (
-        <div style={{ display:"flex", flexWrap:"wrap", gap:6, marginBottom:6 }}>
-          {allList.map(l => (
+      {/* 목록 버튼들 — 항상 표시 */}
+      {filtered.length > 0 && (
+        <div style={{ display:"flex", flexWrap:"wrap", gap:6, marginBottom:8 }}>
+          {filtered.map(l => (
             <button key={l} onClick={() => select(l)} style={{
               padding:"8px 14px", borderRadius:20, fontSize:13, cursor:"pointer",
               background: value === l ? "#f5a623" : "#22263a",
@@ -245,47 +244,19 @@ function LocButtons({ list, value, onChange, placeholder }) {
               WebkitTapHighlightColor:"transparent"
             }}>{l}</button>
           ))}
-          <button onClick={() => setShowInput(true)} style={{
-            padding:"8px 14px", borderRadius:20, fontSize:13, cursor:"pointer",
-            background:"transparent", color:"#7a7f9a",
-            border:"1px dashed #3a3f5a"
-          }}>✏️ 직접입력</button>
         </div>
       )}
 
-      {/* 직접 입력 모드 */}
-      {showInput && (
-        <div>
-          <input
-            type="text"
-            value={inputVal}
-            onChange={e => setInputVal(e.target.value)}
-            placeholder={placeholder || "직접 입력"}
-            autoFocus
-            autoComplete="off"
-            style={{ width:"100%", background:"#22263a", border:"1.5px solid #f5a623", borderRadius:10, padding:"11px 14px", color:"#e8eaf0", fontSize:15, outline:"none", marginBottom:6 }}
-          />
-          {filtered.length > 0 && inputVal.trim() && (
-            <div style={{ background:"#1a1d27", border:"1.5px solid #3a3f5a", borderRadius:10, maxHeight:180, overflowY:"auto", marginBottom:6 }}>
-              {filtered.map(l => (
-                <div key={l} onClick={() => select(l)} style={{
-                  padding:"11px 14px", fontSize:14, cursor:"pointer",
-                  color:"#e8eaf0", borderBottom:"1px solid #2e325040",
-                  WebkitTapHighlightColor:"transparent"
-                }}>{l}</div>
-              ))}
-            </div>
-          )}
-          <div style={{ display:"flex", gap:6 }}>
-            <button onClick={() => { if(inputVal.trim()) { onChange(inputVal.trim()); setShowInput(false); setInputVal(""); } }} style={{
-              flex:1, padding:"9px", borderRadius:8, background:"#f5a623", border:"none", color:"#000", fontWeight:700, fontSize:13, cursor:"pointer"
-            }}>확인</button>
-            <button onClick={() => { setShowInput(false); setInputVal(""); }} style={{
-              flex:1, padding:"9px", borderRadius:8, background:"transparent", border:"1px solid #3a3f5a", color:"#7a7f9a", fontSize:13, cursor:"pointer"
-            }}>취소</button>
-          </div>
-        </div>
-      )}
+      {/* 직접 입력창 — 항상 표시 */}
+      <input
+        type="text"
+        value={inputVal}
+        onChange={e => { setInputVal(e.target.value); if(!e.target.value.trim()) onChange(""); }}
+        onBlur={e => { if(e.target.value.trim()) onChange(e.target.value.trim()); }}
+        placeholder={placeholder || "목록에 없으면 직접 입력"}
+        autoComplete="off"
+        style={{ width:"100%", background:"#22263a", border:"1.5px solid #2e3250", borderRadius:10, padding:"10px 14px", color:"#e8eaf0", fontSize:14, outline:"none" }}
+      />
     </div>
   );
 }
