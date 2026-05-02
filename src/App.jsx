@@ -272,9 +272,9 @@ function ReportForm({ vehicles, locationHints, locations, onSave }) {
   const [saved, setSaved]     = useState(false);
   const [err, setErr]         = useState("");
 
-  // 상·하차지 목록: locations 스토리지 기준 (관리자 수정이름 반영)
-  const fromList = [...new Set(locations?.from || [])].sort();
-  const toList   = [...new Set(locations?.to   || [])].sort();
+  // 상·하차지 목록: locations 스토리지 + 일보 기록 합산
+  const fromList = [...new Set([...(locations?.from||[]), ...locationHints.filter(Boolean)])].sort();
+  const toList   = [...new Set([...(locations?.to  ||[]), ...locationHints.filter(Boolean)])].sort();
 
   const addTrip = () => {
     if (trips.length >= 10) return;
@@ -2146,6 +2146,14 @@ export default function App() {
       try { const v = await window.storage.get("dump_vehicles"); if (v?.value) setVehicles(JSON.parse(v.value)); } catch {}
       // 상·하차지 목록은 기사/관리자 모두 불러옴
       try { const l = await window.storage.get("dump_locations"); if (l?.value) setLocationsState(JSON.parse(l.value)); } catch {}
+      // 기사 모드에서도 일보 기록 불러와서 상·하차지 목록 보완
+      if (!isAdminMode) {
+        try {
+          const recs = await window.sbRecords.getAll();
+          const filtered = recs.filter(r => r.type === 'report');
+          setRecords(filtered);
+        } catch {}
+      }
       if (isAdminMode) {
         try {
           const recs = await window.sbRecords.getAll();
