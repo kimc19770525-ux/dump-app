@@ -1,4 +1,3 @@
-import React from 'react'
 import { useState, useEffect, Component } from "react";
 
 export class ErrorBoundary extends Component {
@@ -211,97 +210,80 @@ function AdminLock({ onUnlock, savedPw }) {
   );
 }
 
-// ── 위치 검색 입력 컴포넌트 (한글 IME 안전 버전) ──────────
+// ── 위치 입력 컴포넌트 (목록 버튼 + 직접입력 병행) ──────────
 function LocButtons({ list, value, onChange, placeholder }) {
-  const [query, setQuery] = useState(value || "");
-  const [open, setOpen] = useState(false);
-  const composing = React.useRef(false); // 한글 조합 중 여부
-  const inputRef = React.useRef(null);
-
-  // 외부 value 변경 시 동기화 (조합 중 아닐 때만)
-  useEffect(() => {
-    if (!composing.current) setQuery(value || "");
-  }, [value]);
-
+  const [showInput, setShowInput] = useState(false);
+  const [inputVal, setInputVal] = useState("");
   const allList = list || [];
-  const q = query.trim();
-  const filtered = q
-    ? allList.filter(l => l.includes(q))
-    : allList.slice(0, 12);
 
-  // 목록 항목 터치/클릭 선택
-  const select = (l) => {
-    onChange(l);
-    setQuery(l);
-    setOpen(false);
-    inputRef.current?.blur();
-  };
+  const select = (l) => { onChange(l); setShowInput(false); setInputVal(""); };
 
-  // 한글 조합 시작 — 이 시점엔 아무것도 하지 않음
-  const handleCompositionStart = () => { composing.current = true; };
-
-  // 한글 조합 완료 — 완성된 값으로 한 번만 처리
-  const handleCompositionEnd = (e) => {
-    composing.current = false;
-    const val = e.target.value;
-    setQuery(val);
-    onChange(val);
-    setOpen(true);
-  };
-
-  // 일반 onChange — 조합 중엔 query만 업데이트, onChange 호출 안 함
-  const handleChange = (e) => {
-    const val = e.target.value;
-    setQuery(val);
-    if (!composing.current) {
-      onChange(val);
-      setOpen(true);
-    }
-  };
-
-  const handleFocus = () => setOpen(true);
-
-  // blur 시 약간 딜레이 — 터치로 목록 선택할 시간 확보
-  const handleBlur = () => setTimeout(() => setOpen(false), 200);
+  const filtered = inputVal.trim()
+    ? allList.filter(l => l.includes(inputVal.trim()))
+    : allList;
 
   return (
-    <div style={{ position: "relative" }}>
-      <input
-        ref={inputRef}
-        type="text"
-        value={query}
-        onChange={handleChange}
-        onCompositionStart={handleCompositionStart}
-        onCompositionEnd={handleCompositionEnd}
-        onFocus={handleFocus}
-        onBlur={handleBlur}
-        placeholder={placeholder || "눌러서 검색하거나 직접 입력"}
-        autoComplete="off"
-        autoCorrect="off"
-        autoCapitalize="off"
-        spellCheck={false}
-        style={{ width:"100%", background:"#22263a", border:`1.5px solid ${open ? "#f5a623" : "#2e3250"}`, borderRadius:10, padding:"11px 14px", color:"#e8eaf0", fontSize:15, outline:"none", transition:"border-color .15s" }}
-      />
-      {open && filtered.length > 0 && (
-        <div style={{
-          position:"absolute", top:"calc(100% + 4px)", left:0, right:0, zIndex:200,
-          background:"#1a1d27", border:"1.5px solid #3a3f5a", borderRadius:10,
-          maxHeight:220, overflowY:"auto",
-          boxShadow:"0 6px 24px rgba(0,0,0,0.7)"
-        }}>
-          {filtered.map(l => (
-            <div key={l}
-              onTouchStart={(e) => { e.preventDefault(); select(l); }}
-              onMouseDown={(e) => { e.preventDefault(); select(l); }}
-              style={{
-                padding:"12px 14px", fontSize:15, cursor:"pointer",
-                color: value === l ? "#f5a623" : "#e8eaf0",
-                background: value === l ? "#0a2a0a" : "transparent",
-                fontWeight: value === l ? 700 : 400,
-                borderBottom:"1px solid #2e325040",
-                WebkitTapHighlightColor:"transparent"
-              }}>{l}</div>
+    <div>
+      {/* 선택된 값 표시 */}
+      {value && !showInput && (
+        <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:6 }}>
+          <span style={{ flex:1, background:"#f5a623", color:"#000", borderRadius:20, padding:"8px 14px", fontSize:14, fontWeight:700 }}>{value}</span>
+          <button onClick={() => { onChange(""); }} style={{ background:"transparent", border:"none", color:"#e74c3c", fontSize:20, cursor:"pointer" }}>×</button>
+        </div>
+      )}
+
+      {/* 목록 버튼들 */}
+      {!showInput && (
+        <div style={{ display:"flex", flexWrap:"wrap", gap:6, marginBottom:6 }}>
+          {allList.map(l => (
+            <button key={l} onClick={() => select(l)} style={{
+              padding:"8px 14px", borderRadius:20, fontSize:13, cursor:"pointer",
+              background: value === l ? "#f5a623" : "#22263a",
+              color: value === l ? "#000" : "#9da3b4",
+              border: `1px solid ${value === l ? "#f5a623" : "#3a3f5a"}`,
+              fontWeight: value === l ? 700 : 400,
+              WebkitTapHighlightColor:"transparent"
+            }}>{l}</button>
           ))}
+          <button onClick={() => setShowInput(true)} style={{
+            padding:"8px 14px", borderRadius:20, fontSize:13, cursor:"pointer",
+            background:"transparent", color:"#7a7f9a",
+            border:"1px dashed #3a3f5a"
+          }}>✏️ 직접입력</button>
+        </div>
+      )}
+
+      {/* 직접 입력 모드 */}
+      {showInput && (
+        <div>
+          <input
+            type="text"
+            value={inputVal}
+            onChange={e => setInputVal(e.target.value)}
+            placeholder={placeholder || "직접 입력"}
+            autoFocus
+            autoComplete="off"
+            style={{ width:"100%", background:"#22263a", border:"1.5px solid #f5a623", borderRadius:10, padding:"11px 14px", color:"#e8eaf0", fontSize:15, outline:"none", marginBottom:6 }}
+          />
+          {filtered.length > 0 && inputVal.trim() && (
+            <div style={{ background:"#1a1d27", border:"1.5px solid #3a3f5a", borderRadius:10, maxHeight:180, overflowY:"auto", marginBottom:6 }}>
+              {filtered.map(l => (
+                <div key={l} onClick={() => select(l)} style={{
+                  padding:"11px 14px", fontSize:14, cursor:"pointer",
+                  color:"#e8eaf0", borderBottom:"1px solid #2e325040",
+                  WebkitTapHighlightColor:"transparent"
+                }}>{l}</div>
+              ))}
+            </div>
+          )}
+          <div style={{ display:"flex", gap:6 }}>
+            <button onClick={() => { if(inputVal.trim()) { onChange(inputVal.trim()); setShowInput(false); setInputVal(""); } }} style={{
+              flex:1, padding:"9px", borderRadius:8, background:"#f5a623", border:"none", color:"#000", fontWeight:700, fontSize:13, cursor:"pointer"
+            }}>확인</button>
+            <button onClick={() => { setShowInput(false); setInputVal(""); }} style={{
+              flex:1, padding:"9px", borderRadius:8, background:"transparent", border:"1px solid #3a3f5a", color:"#7a7f9a", fontSize:13, cursor:"pointer"
+            }}>취소</button>
+          </div>
         </div>
       )}
     </div>
