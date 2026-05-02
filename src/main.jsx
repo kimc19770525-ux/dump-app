@@ -53,7 +53,7 @@ const sb = {
   },
 
   async saveSettings(key, value) {
-    const keyId = { dump_vehicles:1, dump_mappings:2, dump_prices:3, dump_driver_settings:4, dump_adminpw:5 }
+    const keyId = { dump_vehicles:1, dump_mappings:2, dump_prices:3, dump_driver_settings:4, dump_adminpw:5, dump_locations:6 }
     const id = keyId[key] || 9
     try {
       const body = { id, type: 'settings', date: key, vehicle: '', data: { key, value }, saved_at: new Date().toISOString() }
