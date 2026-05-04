@@ -118,7 +118,14 @@ function WorkItem({ item, onChange }) {
             const mc = MATERIAL_COLORS[m];
             const isSelected = item.material === m;
             return (
-              <button key={m} onClick={() => onChange({ ...item, material: m })} style={{
+              <button key={m} onClick={() => {
+                const M3_MATERIALS = ["모래","25mm","혼합","석분"];
+                const isM3 = M3_MATERIALS.includes(m);
+                // m3 품목 선택시 단위 자동 m³, 수량 있으면 ×17 변환
+                const newQty = isM3 && item.qty ? String(Math.round(Number(item.qty) * 17)) : item.qty;
+                const newUnit = isM3 ? "m³" : item.unit;
+                onChange({ ...item, material: m, qty: newQty, unit: newUnit });
+              }} style={{
                 padding: "7px 13px", borderRadius: 20, fontSize: 13,
                 fontWeight: isSelected ? 700 : 400,
                 background: isSelected ? (mc ? mc.bg : C.accent) : (mc ? mc.bg+"80" : "#1a1d27"),
@@ -132,7 +139,17 @@ function WorkItem({ item, onChange }) {
       <div style={{ display: "flex", gap: 10 }}>
         <div style={{ flex: 2 }}>
           <div style={{ fontSize: 11, color: C.muted, marginBottom: 4 }}>수량</div>
-          <input type="number" value={item.qty} onChange={e => onChange({ ...item, qty: e.target.value })} placeholder="0"
+          <input type="number" value={item.qty} onChange={e => {
+            const M3_MATERIALS = ["모래","25mm","혼합","석분"];
+            const raw = e.target.value;
+            if (M3_MATERIALS.includes(item.material) && raw && Number(raw) < 100) {
+              // 1~99 입력시 ×17 자동변환, 100 이상이면 이미 변환된 것으로 간주
+              const converted = String(Math.round(Number(raw) * 17));
+              onChange({ ...item, qty: converted, unit: "m³" });
+            } else {
+              onChange({ ...item, qty: raw });
+            }
+          }} placeholder="0"
             style={{ width: "100%", background: "#1a1d27", border: `1.5px solid ${C.border}`, borderRadius: 8, padding: "12px", color: C.text, fontSize: 20, fontWeight: 700, outline: "none" }} />
         </div>
         <div style={{ flex: 1 }}>
