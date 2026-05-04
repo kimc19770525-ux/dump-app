@@ -1521,10 +1521,14 @@ function AdminDash({ records, vehicles, setVehicles, mappings, setMappings, pric
   const fineRecs      = records.filter(r => r.type === "fine"      && inRange(r));
 
   const getClients = (rec) => {
+    // 하차지 예외 매핑 먼저 확인 — 있으면 상차지 매핑 무시하고 하차지로만
+    const toMatch = mappings.find(m => m.type === "to" && m.location === rec.to);
+    if (toMatch) return [toMatch.client];
+
+    // 상차지 기준 매핑
     const result = [];
     mappings.forEach(m => {
       if (m.type === "from" && rec.from === m.location && !result.includes(m.client)) result.push(m.client);
-      if (m.type === "to"   && rec.to   === m.location && !result.includes(m.client)) result.push(m.client);
     });
     return result;
   };
