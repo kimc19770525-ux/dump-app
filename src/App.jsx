@@ -870,15 +870,7 @@ function MappingTab({ mappings, setMappings, records }) {
             <div style={{ marginBottom: 12 }}>
               <div style={{ fontSize: 12, color: C.blue, fontWeight: 700, marginBottom: 8 }}>↑ 상차지 기준</div>
               {fromMappings.map(m => (
-                <div key={m.id} style={{ display:"flex", alignItems:"center", justifyContent:"space-between", background:C.card2, borderRadius:10, padding:"10px 14px", marginBottom:6 }}>
-                  <div style={{ fontSize:14 }}>
-                    <span style={{ color:C.blue, fontWeight:700 }}>{m.location}</span>
-                    <span style={{ color:C.muted, margin:"0 8px" }}>→</span>
-                    <span style={{ fontWeight:700 }}>{m.client}</span>
-                  </div>
-                  <button type="button" onClick={()=>setMappings(prev=>prev.filter(x=>x.id!==m.id))}
-                    style={{ background:"none", border:"none", color:C.danger, cursor:"pointer", fontSize:18, lineHeight:1 }}>×</button>
-                </div>
+                <MappingRow key={m.id} m={m} color={C.blue} onDelete={()=>setMappings(prev=>prev.filter(x=>x.id!==m.id))} onEdit={(id,newClient)=>setMappings(prev=>prev.map(x=>x.id===id?{...x,client:newClient}:x))} />
               ))}
             </div>
           )}
@@ -887,20 +879,47 @@ function MappingTab({ mappings, setMappings, records }) {
             <div>
               <div style={{ fontSize: 12, color: C.green, fontWeight: 700, marginBottom: 8 }}>↓ 하차지 기준 (예외)</div>
               {toMappings.map(m => (
-                <div key={m.id} style={{ display:"flex", alignItems:"center", justifyContent:"space-between", background:C.card2, borderRadius:10, padding:"10px 14px", marginBottom:6 }}>
-                  <div style={{ fontSize:14 }}>
-                    <span style={{ color:C.green, fontWeight:700 }}>{m.location}</span>
-                    <span style={{ color:C.muted, margin:"0 8px" }}>→</span>
-                    <span style={{ fontWeight:700 }}>{m.client}</span>
-                  </div>
-                  <button type="button" onClick={()=>setMappings(prev=>prev.filter(x=>x.id!==m.id))}
-                    style={{ background:"none", border:"none", color:C.danger, cursor:"pointer", fontSize:18, lineHeight:1 }}>×</button>
-                </div>
+                <MappingRow key={m.id} m={m} color={C.green} onDelete={()=>setMappings(prev=>prev.filter(x=>x.id!==m.id))} onEdit={(id,newClient)=>setMappings(prev=>prev.map(x=>x.id===id?{...x,client:newClient}:x))} />
               ))}
             </div>
           )}
         </Card>
       )}
+    </div>
+  );
+}
+
+// ── 매핑 행 컴포넌트 (수정/삭제)
+function MappingRow({ m, color, onDelete, onEdit }) {
+  const [editing, setEditing] = useState(false);
+  const [val, setVal] = useState(m.client);
+
+  const save = () => { if(val.trim()) { onEdit(m.id, val.trim()); setEditing(false); } };
+
+  if (editing) {
+    return (
+      <div style={{ display:"flex", gap:6, alignItems:"center", background:C.card2, borderRadius:10, padding:"8px 10px", marginBottom:6 }}>
+        <span style={{ color, fontWeight:700, fontSize:13, whiteSpace:"nowrap" }}>{m.location}</span>
+        <span style={{ color:C.muted }}>→</span>
+        <input value={val} onChange={e=>setVal(e.target.value)} autoFocus
+          style={{ flex:1, background:"#1a1d27", border:`1.5px solid ${color}`, borderRadius:8, padding:"6px 10px", color:C.text, fontSize:13, outline:"none" }} />
+        <button onClick={save} style={{ background:color, border:"none", borderRadius:8, padding:"6px 12px", color:"#000", fontWeight:700, fontSize:12, cursor:"pointer" }}>저장</button>
+        <button onClick={()=>setEditing(false)} style={{ background:"transparent", border:`1px solid ${C.border}`, borderRadius:8, padding:"6px 10px", color:C.muted, fontSize:12, cursor:"pointer" }}>취소</button>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", background:C.card2, borderRadius:10, padding:"10px 14px", marginBottom:6 }}>
+      <div style={{ fontSize:14 }}>
+        <span style={{ color, fontWeight:700 }}>{m.location}</span>
+        <span style={{ color:C.muted, margin:"0 8px" }}>→</span>
+        <span style={{ fontWeight:700 }}>{m.client}</span>
+      </div>
+      <div style={{ display:"flex", gap:6 }}>
+        <button onClick={()=>setEditing(true)} style={{ background:C.blue+"20", border:`1px solid ${C.blue}40`, borderRadius:8, padding:"4px 10px", color:C.blue, fontSize:12, cursor:"pointer" }}>✏️</button>
+        <button onClick={onDelete} style={{ background:"none", border:"none", color:C.danger, cursor:"pointer", fontSize:18, lineHeight:1 }}>×</button>
+      </div>
     </div>
   );
 }
@@ -1297,6 +1316,103 @@ function PendingReports({ records, onRefresh }) {
 }
 
 // ════════════════════════════════════════════════════════════
+// 오늘 제출내역 — 차량별 묶음, 눌러서 세부내용
+// ════════════════════════════════════════════════════════════
+function TodayReports({ todayRecs, todayStr }) {
+  const [openVehicle, setOpenVehicle] = useState(null);
+
+  if (todayRecs.length === 0) {
+    return (
+      <div style={{ textAlign:"center", padding:"40px 20px", color:C.muted }}>
+        <div style={{ fontSize:36, marginBottom:12 }}>📭</div>
+        <div style={{ fontSize:14 }}>오늘 제출한 일보가 없어요</div>
+      </div>
+    );
+  }
+
+  // 차량별 묶기
+  const byVehicle = {};
+  todayRecs.forEach(r => {
+    if (!byVehicle[r.vehicle]) byVehicle[r.vehicle] = [];
+    byVehicle[r.vehicle].push(r);
+  });
+
+  return (
+    <div style={{ padding:"16px" }}>
+      <div style={{ fontSize:13, color:C.muted, marginBottom:12 }}>{todayStr} 제출 내역</div>
+      {Object.entries(byVehicle).sort(([a],[b])=>a.localeCompare(b)).map(([vehicle, recs]) => {
+        const isOpen = openVehicle === vehicle;
+        const allApproved = recs.every(r => r.status === "approved");
+        const pendingCount = recs.filter(r => r.status === "pending").length;
+        return (
+          <div key={vehicle} style={{ marginBottom:10 }}>
+            {/* 차량 헤더 — 누르면 펼침/접기 */}
+            <button onClick={() => setOpenVehicle(isOpen ? null : vehicle)} style={{
+              width:"100%", background: allApproved ? "#0a1f0a" : C.card2,
+              border:`1.5px solid ${allApproved ? C.green : C.accent+"60"}`,
+              borderRadius: isOpen ? "12px 12px 0 0" : 12,
+              padding:"13px 16px", cursor:"pointer", textAlign:"left",
+              display:"flex", justifyContent:"space-between", alignItems:"center"
+            }}>
+              <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+                <span style={{ fontSize:15, color: allApproved ? C.green : C.accent, fontWeight:900 }}>
+                  🚛 {vehicle}호
+                </span>
+                <span style={{ fontSize:12, color:C.muted }}>{recs.length}건</span>
+              </div>
+              <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                {allApproved ? (
+                  <span style={{ fontSize:12, color:C.green, fontWeight:700 }}>✅ 전체승인</span>
+                ) : (
+                  <span style={{ fontSize:12, color:C.accent, fontWeight:700 }}>⏳ 대기 {pendingCount}건</span>
+                )}
+                <span style={{ color:C.muted, fontSize:16 }}>{isOpen ? "▲" : "▼"}</span>
+              </div>
+            </button>
+
+            {/* 세부내용 — 펼쳤을 때 */}
+            {isOpen && (
+              <div style={{
+                background:"#0d1020", border:`1.5px solid ${allApproved ? C.green : C.accent+"60"}`,
+                borderTop:"none", borderRadius:"0 0 12px 12px", padding:"10px 12px"
+              }}>
+                {recs.slice().sort((a,b)=>(a.savedAt||"").localeCompare(b.savedAt||"")).map((r, i) => (
+                  <div key={r.id} style={{
+                    background: r.status==="approved" ? "#0a1a0a" : C.card2,
+                    border:`1px solid ${r.status==="approved" ? C.green+"40" : C.border}`,
+                    borderRadius:10, padding:"10px 12px", marginBottom:6
+                  }}>
+                    <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:4 }}>
+                      <span style={{ fontSize:12, color:C.muted }}>현장 {i+1}</span>
+                      <span style={{
+                        fontSize:11, fontWeight:700, padding:"2px 8px", borderRadius:10,
+                        background: r.status==="approved" ? C.green+"25" : C.accent+"20",
+                        color: r.status==="approved" ? C.green : C.accent
+                      }}>
+                        {r.status==="approved" ? "✅ 승인됨" : "⏳ 대기중"}
+                      </span>
+                    </div>
+                    <div style={{ fontSize:14, color:C.text, marginBottom:3 }}>
+                      <span style={{ color:C.blue }}>{r.from}</span>
+                      <span style={{ color:C.muted, margin:"0 6px" }}>→</span>
+                      <span style={{ color:C.green }}>{r.to}</span>
+                    </div>
+                    <div style={{ fontSize:13, color:C.accent, fontWeight:700 }}>
+                      {r.work?.material} {r.work?.qty}{r.work?.unit}
+                    </div>
+                    {r.memo && <div style={{ fontSize:12, color:C.muted, marginTop:3 }}>📝 {r.memo}</div>}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ════════════════════════════════════════════════════════════
 // 기사 화면 — 일보입력 + 오늘 제출내역
 // ════════════════════════════════════════════════════════════
 function DriverScreen({ vehicles, locationHints, locations, records, onSave, onRefresh }) {
@@ -1326,42 +1442,7 @@ function DriverScreen({ vehicles, locationHints, locations, records, onSave, onR
           <ReportForm vehicles={vehicles} locationHints={locationHints} locations={locations} records={records} onSave={onSave} />
         )}
         {tab === "today" && (
-          <div style={{ padding:"16px" }}>
-            {todayRecs.length === 0 ? (
-              <div style={{ textAlign:"center", padding:"40px 20px", color:C.muted }}>
-                <div style={{ fontSize:36, marginBottom:12 }}>📭</div>
-                <div style={{ fontSize:14 }}>오늘 제출한 일보가 없어요</div>
-              </div>
-            ) : (
-              <>
-                <div style={{ fontSize:13, color:C.muted, marginBottom:12 }}>{todayStr} 제출 내역</div>
-                {todayRecs.map((r, i) => (
-                  <div key={r.id} style={{
-                    background:C.card2, border:`1px solid ${r.status==="approved" ? C.green : r.status==="pending" ? C.accent+"60" : C.border}`,
-                    borderRadius:12, padding:"12px 14px", marginBottom:8
-                  }}>
-                    <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:6 }}>
-                      <span style={{ fontSize:12, color:C.muted }}>현장 {i+1} · {r.vehicle}호</span>
-                      <span style={{
-                        fontSize:11, fontWeight:700, padding:"2px 8px", borderRadius:10,
-                        background: r.status==="approved" ? C.green+"25" : C.accent+"25",
-                        color: r.status==="approved" ? C.green : C.accent
-                      }}>
-                        {r.status==="approved" ? "✅ 승인됨" : "⏳ 대기중"}
-                      </span>
-                    </div>
-                    <div style={{ fontSize:14, color:C.text, marginBottom:4 }}>
-                      {r.from} → {r.to}
-                    </div>
-                    <div style={{ fontSize:13, color:C.accent, fontWeight:700 }}>
-                      {r.work?.material} {r.work?.qty}{r.work?.unit}
-                    </div>
-                    {r.memo && <div style={{ fontSize:12, color:C.muted, marginTop:4 }}>{r.memo}</div>}
-                  </div>
-                ))}
-              </>
-            )}
-          </div>
+          <TodayReports todayRecs={todayRecs} todayStr={todayStr} />
         )}
       </div>
     </>
@@ -1466,13 +1547,11 @@ function AdminDash({ records, vehicles, setVehicles, mappings, setMappings, pric
     });
   });
 
-  // 미매핑 현장 추출
+  // 미매핑 현장 추출 — 상차지 기준으로만 (하차지는 예외일 때만 매핑하므로 체크 안 함)
   const unmappedMap = {};
   reportRecs.forEach(r => {
     const fromMapped = mappings.some(m => m.type === "from" && m.location === r.from);
-    const toMapped   = mappings.some(m => m.type === "to"   && m.location === r.to);
     if (!fromMapped && r.from) unmappedMap[`from::${r.from}`] = { loc: r.from, type: "from" };
-    if (!toMapped   && r.to)   unmappedMap[`to::${r.to}`]     = { loc: r.to,   type: "to" };
   });
   const unmappedLocs = Object.values(unmappedMap);
 
