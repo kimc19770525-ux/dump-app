@@ -128,9 +128,10 @@ function WorkItem({ item, onChange }) {
               }} style={{
                 padding: "7px 13px", borderRadius: 20, fontSize: 13,
                 fontWeight: isSelected ? 700 : 400,
-                background: isSelected ? (mc ? mc.bg : C.accent) : (mc ? mc.bg+"80" : "#1a1d27"),
-                color: isSelected ? (mc ? mc.color : "#000") : (mc ? mc.color : C.muted),
-                border: `1px solid ${isSelected ? (mc ? mc.color : C.accent) : (mc ? mc.color+"50" : C.border)}`
+                background: isSelected ? "#f5a623" : (mc ? mc.bg+"80" : "#1a1d27"),
+                color: isSelected ? "#000" : (mc ? mc.color : C.muted),
+                border: `1px solid ${isSelected ? "#f5a623" : (mc ? mc.color+"50" : C.border)}`,
+                boxShadow: isSelected ? "0 0 8px #f5a62380" : "none"
               }}>{m}</button>
             );
           })}
@@ -142,12 +143,12 @@ function WorkItem({ item, onChange }) {
           <input type="number" value={item.qty} onChange={e => {
             const M3_MATERIALS = ["모래","25mm","혼합","석분"];
             const raw = e.target.value;
-            if (M3_MATERIALS.includes(item.material) && raw && Number(raw) < 100) {
-              // 1~99 입력시 ×17 자동변환, 100 이상이면 이미 변환된 것으로 간주
-              const converted = String(Math.round(Number(raw) * 17));
-              onChange({ ...item, qty: converted, unit: "m³" });
-            } else {
-              onChange({ ...item, qty: raw });
+            onChange({ ...item, qty: raw, unit: M3_MATERIALS.includes(item.material) ? "m³" : item.unit });
+          }} onBlur={e => {
+            const M3_MATERIALS = ["모래","25mm","혼합","석분"];
+            const raw = e.target.value;
+            if (M3_MATERIALS.includes(item.material) && raw && Number(raw) > 0 && Number(raw) <= 9) {
+              onChange({ ...item, qty: String(Math.round(Number(raw) * 17)), unit: "m³" });
             }
           }} placeholder="0"
             style={{ width: "100%", background: "#1a1d27", border: `1.5px solid ${C.border}`, borderRadius: 8, padding: "12px", color: C.text, fontSize: 20, fontWeight: 700, outline: "none" }} />
@@ -227,79 +228,57 @@ function AdminLock({ onUnlock, savedPw }) {
   );
 }
 
-// ── 위치 입력 컴포넌트 (드롭다운 + 직접입력) ──────────────
+// ── 위치 입력 컴포넌트 (네이티브 select + 직접입력) ──────────
 function LocButtons({ list, value, onChange, placeholder }) {
-  const [open, setOpen] = useState(false);
-  const [inputVal, setInputVal] = useState(value || "");
+  const [customMode, setCustomMode] = useState(false);
+  const [customVal, setCustomVal] = useState("");
   const allList = list || [];
-  const blurRef = React.useRef(null);
 
   useEffect(() => {
-    setInputVal(value || "");
+    // value가 목록에 없으면 직접입력 모드
+    if (value && !allList.includes(value)) {
+      setCustomMode(true);
+      setCustomVal(value);
+    } else {
+      setCustomMode(false);
+      setCustomVal("");
+    }
   }, [value]);
 
-  const filtered = inputVal.trim()
-    ? allList.filter(l => l.includes(inputVal.trim()))
-    : allList.slice(0, 20);
-
-  const select = (l) => {
-    clearTimeout(blurRef.current);
-    onChange(l);
-    setInputVal(l);
-    setOpen(false);
-  };
-
-  const handleFocus = () => setOpen(true);
-
-  const handleBlur = () => {
-    blurRef.current = setTimeout(() => {
-      if (inputVal.trim()) onChange(inputVal.trim());
-      setOpen(false);
-    }, 200);
-  };
-
-  const handleChange = (e) => {
-    setInputVal(e.target.value);
-    setOpen(true);
-  };
+  if (customMode) {
+    return (
+      <div style={{ display:"flex", gap:6 }}>
+        <input
+          type="text"
+          value={customVal}
+          onChange={e => { setCustomVal(e.target.value); onChange(e.target.value); }}
+          placeholder={placeholder || "직접 입력"}
+          autoComplete="off"
+          style={{ flex:1, background:"#22263a", border:"1.5px solid #f5a623", borderRadius:10, padding:"11px 14px", color:"#e8eaf0", fontSize:15, outline:"none" }}
+        />
+        <button onClick={() => { setCustomMode(false); onChange(""); }} style={{
+          background:"transparent", border:"1px solid #3a3f5a", borderRadius:10,
+          padding:"0 12px", color:"#7a7f9a", fontSize:13, cursor:"pointer"
+        }}>목록</button>
+      </div>
+    );
+  }
 
   return (
-    <div style={{ position:"relative" }}>
-      <input
-        type="text"
-        value={inputVal}
-        onChange={handleChange}
-        onFocus={handleFocus}
-        onBlur={handleBlur}
-        placeholder={placeholder || "눌러서 선택하거나 직접 입력"}
-        autoComplete="off"
-        autoCorrect="off"
-        autoCapitalize="off"
-        spellCheck={false}
-        style={{ width:"100%", background:"#22263a", border:`1.5px solid ${open?"#f5a623":"#2e3250"}`, borderRadius:10, padding:"11px 14px", color:"#e8eaf0", fontSize:15, outline:"none" }}
-      />
-      {open && filtered.length > 0 && (
-        <div style={{
-          position:"absolute", top:"calc(100% + 4px)", left:0, right:0, zIndex:300,
-          background:"#1a1d27", border:"1.5px solid #3a3f5a", borderRadius:10,
-          maxHeight:200, overflowY:"auto",
-          boxShadow:"0 6px 24px rgba(0,0,0,0.8)"
-        }}>
-          {filtered.map(l => (
-            <div key={l}
-              onTouchStart={e => { e.preventDefault(); clearTimeout(blurRef.current); select(l); }}
-              onMouseDown={e => { e.preventDefault(); select(l); }}
-              style={{
-                padding:"12px 14px", fontSize:15, cursor:"pointer",
-                color: value===l ? "#f5a623" : "#e8eaf0",
-                background: value===l ? "#0f2a0f" : "transparent",
-                fontWeight: value===l ? 700 : 400,
-                borderBottom:"1px solid #2e325040",
-                WebkitTapHighlightColor:"transparent"
-              }}>{l}</div>
-          ))}
-        </div>
-      )}
+    <div>
+      <select
+        value={value || ""}
+        onChange={e => {
+          const v = e.target.value;
+          if (v === "__custom__") { setCustomMode(true); setCustomVal(""); onChange(""); }
+          else onChange(v);
+        }}
+        style={{ width:"100%", background:"#22263a", border:`1.5px solid ${value?"#f5a623":"#2e3250"}`, borderRadius:10, padding:"11px 14px", color: value ? "#e8eaf0" : "#7a7f9a", fontSize:15, outline:"none" }}
+      >
+        <option value="">{placeholder || "눌러서 선택"}</option>
+        {allList.map(l => <option key={l} value={l}>{l}</option>)}
+        <option value="__custom__">✏️ 직접 입력...</option>
+      </select>
     </div>
   );
 }
@@ -1182,6 +1161,8 @@ function PendingReports({ records, onRefresh }) {
     setEditMap(prev => ({ ...prev, [id]: { ...prev[id], [field]: val } }));
   };
 
+  const [approvedIds, setApprovedIds] = useState(new Set());
+
   const approve = async (r) => {
     const e = editMap[r.id];
     const updated = {
@@ -1192,7 +1173,12 @@ function PendingReports({ records, onRefresh }) {
         work: { ...r.work, material: e.material, qty: e.qty, unit: e.unit }
       } : {})
     };
-    try { await window.sbRecords.upsert(updated); onRefresh(); } catch(err) { alert("저장 실패: " + err); }
+    try {
+      await window.sbRecords.upsert(updated);
+      // 사라지지 않고 승인됨 표시
+      setApprovedIds(prev => new Set([...prev, r.id]));
+      setEditMap(prev => { const n={...prev}; delete n[r.id]; return n; });
+    } catch(err) { alert("저장 실패: " + err); }
   };
 
   const reject = async (r) => {
@@ -1206,9 +1192,11 @@ function PendingReports({ records, onRefresh }) {
     } catch {}
   };
 
-  const approveAll = async (recs) => {
-    if (!window.confirm(`${recs[0].vehicle}호 대기 ${recs.length}건을 모두 승인할까요?`)) return;
+  const approveAll = async (recs, vehicle) => {
+    if (!window.confirm(`${vehicle}호 대기 ${recs.length}건을 모두 승인할까요?`)) return;
     for (const r of recs) await approve(r);
+    // 전체승인 후 새로고침으로 해당 차량 목록 제거
+    onRefresh();
   };
 
   return (
@@ -1222,7 +1210,7 @@ function PendingReports({ records, onRefresh }) {
           <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:10 }}>
             <div style={{ fontSize:14, color:C.green, fontWeight:900 }}>🚛 {vehicle}호 ({recs.length}건)</div>
             <div style={{ display:"flex", gap:6 }}>
-              <button onClick={() => approveAll(recs)} style={{
+              <button onClick={() => approveAll(recs, vehicle)} style={{
                 background:C.green, border:"none", borderRadius:8, padding:"5px 12px",
                 color:"#000", fontSize:12, fontWeight:700, cursor:"pointer"
               }}>✅ 전체승인</button>
@@ -1243,12 +1231,15 @@ function PendingReports({ records, onRefresh }) {
                   /* 읽기 모드 */
                   <div style={{ display:"flex", alignItems:"center", gap:6, flexWrap:"wrap" }}>
                     <span style={{ fontSize:12, color:C.muted, minWidth:50 }}>{r.date?.slice(5)}</span>
-                    <span style={{ fontSize:13, color:C.text, flex:1 }}>
+                    <span style={{ fontSize:13, color:approvedIds.has(r.id) ? C.green : C.text, flex:1 }}>
                       {r.from} → {r.to}
                     </span>
                     <span style={{ fontSize:12, color:C.accent, fontWeight:700, whiteSpace:"nowrap" }}>
                       {r.work?.material} {r.work?.qty}{r.work?.unit}
                     </span>
+                    {approvedIds.has(r.id) ? (
+                      <span style={{ fontSize:12, color:C.green, fontWeight:700 }}>✅ 승인됨</span>
+                    ) : (
                     <div style={{ display:"flex", gap:4, marginLeft:"auto" }}>
                       <button onClick={() => startEdit(r)} style={{
                         background:C.blue+"25", border:`1px solid ${C.blue}50`,
@@ -1263,6 +1254,7 @@ function PendingReports({ records, onRefresh }) {
                         borderRadius:6, padding:"4px 10px", color:C.danger, fontSize:11, cursor:"pointer"
                       }}>❌</button>
                     </div>
+                    )}
                   </div>
                 ) : (
                   /* 편집 모드 */
@@ -1301,6 +1293,78 @@ function PendingReports({ records, onRefresh }) {
         </div>
       ))}
     </div>
+  );
+}
+
+// ════════════════════════════════════════════════════════════
+// 기사 화면 — 일보입력 + 오늘 제출내역
+// ════════════════════════════════════════════════════════════
+function DriverScreen({ vehicles, locationHints, locations, records, onSave, onRefresh }) {
+  const [tab, setTab] = useState("input"); // "input" | "today"
+
+  const todayStr = today();
+  // 오늘 제출한 일보 (차량 무관, 오늘 날짜 기준)
+  const todayRecs = records.filter(r => r.type === "report" && r.date === todayStr)
+    .slice().sort((a, b) => (b.savedAt||"").localeCompare(a.savedAt||""));
+
+  return (
+    <>
+      <Nav />
+      {/* 탭 버튼 */}
+      <div style={{ display:"flex", background:C.card, borderBottom:`1px solid ${C.border}` }}>
+        {[["input","📝 일보입력"], ["today",`📋 오늘내역 (${todayRecs.length})`]].map(([k,l]) => (
+          <button key={k} onClick={() => { setTab(k); if(k==="today") onRefresh(); }} style={{
+            flex:1, padding:"12px 0", border:"none", borderBottom:`2.5px solid ${tab===k ? C.accent : "transparent"}`,
+            background:"transparent", color: tab===k ? C.accent : C.muted,
+            fontWeight: tab===k ? 700 : 400, fontSize:14, cursor:"pointer"
+          }}>{l}</button>
+        ))}
+      </div>
+
+      <div style={{ background:C.card, borderLeft:`1px solid ${C.border}`, borderRight:`1px solid ${C.border}`, minHeight:"calc(100vh - 150px)" }}>
+        {tab === "input" && (
+          <ReportForm vehicles={vehicles} locationHints={locationHints} locations={locations} records={records} onSave={onSave} />
+        )}
+        {tab === "today" && (
+          <div style={{ padding:"16px" }}>
+            {todayRecs.length === 0 ? (
+              <div style={{ textAlign:"center", padding:"40px 20px", color:C.muted }}>
+                <div style={{ fontSize:36, marginBottom:12 }}>📭</div>
+                <div style={{ fontSize:14 }}>오늘 제출한 일보가 없어요</div>
+              </div>
+            ) : (
+              <>
+                <div style={{ fontSize:13, color:C.muted, marginBottom:12 }}>{todayStr} 제출 내역</div>
+                {todayRecs.map((r, i) => (
+                  <div key={r.id} style={{
+                    background:C.card2, border:`1px solid ${r.status==="approved" ? C.green : r.status==="pending" ? C.accent+"60" : C.border}`,
+                    borderRadius:12, padding:"12px 14px", marginBottom:8
+                  }}>
+                    <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:6 }}>
+                      <span style={{ fontSize:12, color:C.muted }}>현장 {i+1} · {r.vehicle}호</span>
+                      <span style={{
+                        fontSize:11, fontWeight:700, padding:"2px 8px", borderRadius:10,
+                        background: r.status==="approved" ? C.green+"25" : C.accent+"25",
+                        color: r.status==="approved" ? C.green : C.accent
+                      }}>
+                        {r.status==="approved" ? "✅ 승인됨" : "⏳ 대기중"}
+                      </span>
+                    </div>
+                    <div style={{ fontSize:14, color:C.text, marginBottom:4 }}>
+                      {r.from} → {r.to}
+                    </div>
+                    <div style={{ fontSize:13, color:C.accent, fontWeight:700 }}>
+                      {r.work?.material} {r.work?.qty}{r.work?.unit}
+                    </div>
+                    {r.memo && <div style={{ fontSize:12, color:C.muted, marginTop:4 }}>{r.memo}</div>}
+                  </div>
+                ))}
+              </>
+            )}
+          </div>
+        )}
+      </div>
+    </>
   );
 }
 
@@ -2287,14 +2351,12 @@ export default function App() {
           </div>
         </div>
 
-        {/* 기사 화면 — 일보 입력만 */}
+        {/* 기사 화면 */}
         {!isAdminMode && (
-          <>
-            <Nav />
-            <div style={{ background: C.card, borderLeft: `1px solid ${C.border}`, borderRight: `1px solid ${C.border}`, minHeight: "calc(100vh - 110px)" }}>
-              <ReportForm vehicles={vehicles} locationHints={locationHints} locations={locations} records={records} onSave={saveRecord} />
-            </div>
-          </>
+          <DriverScreen
+            vehicles={vehicles} locationHints={locationHints} locations={locations}
+            records={records} onSave={saveRecord} onRefresh={refreshRecords}
+          />
         )}
 
         {/* 관리자 화면 — ?admin URL로 접근 */}
