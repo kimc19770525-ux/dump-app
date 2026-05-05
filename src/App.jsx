@@ -285,7 +285,7 @@ function LocButtons({ list, value, onChange, placeholder }) {
       />
       {open && filtered.length > 0 && (
         <div style={{
-          position:"absolute", top:"calc(100% + 2px)", left:0, right:0, zIndex:300,
+          position:"absolute", top:"calc(100% + 2px)", left:0, right:0, zIndex:9999,
           background:"#1a1d27", border:"1.5px solid #3a3f5a", borderRadius:10,
           maxHeight:200, overflowY:"auto",
           boxShadow:"0 6px 24px rgba(0,0,0,0.8)"
@@ -433,7 +433,7 @@ function ReportForm({ vehicles, locationHints, locations, records, onSave }) {
       </div>
 
       {/* 표 형식 일보 */}
-      <div style={{ background:C.card2, border:`1.5px solid ${C.border}`, borderRadius:12, overflow:"hidden", marginBottom:12 }}>
+      <div style={{ background:C.card2, border:`1.5px solid ${C.border}`, borderRadius:12, overflow:"visible", marginBottom:12 }}>
         {/* 헤더행 */}
         <div style={{ display:"grid", gridTemplateColumns:"28px 1fr 1fr 80px 52px 36px", background:"#1a1d27", borderBottom:`1px solid ${C.border}` }}>
           {["No","상차지","하차지","품목","수량",""].map((h,i) => (
@@ -475,11 +475,15 @@ function ReportForm({ vehicles, locationHints, locations, records, onSave }) {
                 style={{ width:"100%", background:"transparent", border:"none", color:C.text, fontSize:13, outline:"none", textAlign:"right" }} />
             </div>
 
-            {/* 삭제 */}
+            {/* 삭제/초기화 */}
             <div style={{ display:"flex", alignItems:"center", justifyContent:"center" }}>
               {trips.length > 1 ? (
-                <button onClick={()=>removeTrip(i)} style={{ background:"none", border:"none", color:C.danger, fontSize:18, cursor:"pointer", lineHeight:1 }}>×</button>
-              ) : <span />}
+                <button onClick={()=>removeTrip(i)} style={{ background:"none", border:"none", color:C.danger, fontSize:20, cursor:"pointer", lineHeight:1, padding:"4px" }}>×</button>
+              ) : (
+                <button onClick={()=>updateTrip(0,"from","") || updateTrip(0,"to","") || updateWork(0,{material:"",qty:"",unit:"개"})}
+                  onClick={()=>{ setTrips([{from:"",to:"",work:{material:"",qty:"",unit:"개"}}]); }}
+                  style={{ background:"none", border:"none", color:C.muted, fontSize:13, cursor:"pointer", lineHeight:1, padding:"4px" }}>↺</button>
+              )}
             </div>
           </div>
         ))}
