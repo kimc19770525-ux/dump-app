@@ -228,84 +228,24 @@ function AdminLock({ onUnlock, savedPw }) {
   );
 }
 
-// ── 위치 입력 컴포넌트 (입력창 + 필터 드롭다운) ──────────────
+// ── 위치 입력 컴포넌트 (네이티브 select — 품목과 동일 방식) ──
 function LocButtons({ list, value, onChange, placeholder }) {
-  const [query, setQuery] = useState(value || "");
-  const [open, setOpen] = useState(false);
-  const blurRef = React.useRef(null);
   const allList = list || [];
-
-  // 외부 value 변경 동기화
-  useEffect(() => { setQuery(value || ""); }, [value]);
-
-  // 첫 글자 입력 시 해당 글자로 시작하는 것만 표시
-  const filtered = query.trim()
-    ? allList.filter(l => l.startsWith(query.trim()))
-    : allList;
-
-  const select = (l) => {
-    clearTimeout(blurRef.current);
-    onChange(l);
-    setQuery(l);
-    setOpen(false);
-  };
-
-  const handleFocus = () => setOpen(true);
-  const handleBlur = () => {
-    blurRef.current = setTimeout(() => {
-      if (query.trim() && !allList.includes(query.trim())) onChange(query.trim());
-      setOpen(false);
-    }, 200);
-  };
-  const handleChange = (e) => {
-    setQuery(e.target.value);
-    onChange(e.target.value);
-    setOpen(true);
-  };
-
   return (
-    <div style={{ position:"relative" }}>
-      <input
-        type="text"
-        value={query}
-        onChange={handleChange}
-        onFocus={handleFocus}
-        onBlur={handleBlur}
-        placeholder={placeholder || "첫 글자를 입력하세요"}
-        autoComplete="off"
-        autoCorrect="off"
-        autoCapitalize="off"
-        spellCheck={false}
-        style={{
-          width:"100%", background:"#22263a",
-          border:`1.5px solid ${query ? "#f5a623" : "#2e3250"}`,
-          borderRadius:10, padding:"11px 14px", color:"#e8eaf0",
-          fontSize:15, outline:"none"
-        }}
-      />
-      {open && filtered.length > 0 && (
-        <div style={{
-          position:"absolute", top:"calc(100% + 2px)", left:0, right:0, zIndex:9999,
-          background:"#1a1d27", border:"1.5px solid #3a3f5a", borderRadius:10,
-          maxHeight:200, overflowY:"auto",
-          boxShadow:"0 6px 24px rgba(0,0,0,0.8)"
-        }}>
-          {filtered.map(l => (
-            <div key={l}
-              onTouchEnd={e => { e.preventDefault(); clearTimeout(blurRef.current); select(l); }}
-              onMouseDown={e => { e.preventDefault(); select(l); }}
-              style={{
-                padding:"12px 14px", fontSize:15, cursor:"pointer",
-                color: value === l ? "#f5a623" : "#e8eaf0",
-                background: value === l ? "#0f2a0f" : "transparent",
-                fontWeight: value === l ? 700 : 400,
-                borderBottom:"1px solid #2e325040",
-                WebkitTapHighlightColor:"transparent"
-              }}>{l}</div>
-          ))}
-        </div>
-      )}
-    </div>
+    <select
+      value={value || ""}
+      onChange={e => onChange(e.target.value)}
+      style={{
+        width:"100%", background:"#22263a",
+        border:`1.5px solid ${value ? "#f5a623" : "#2e3250"}`,
+        borderRadius:10, padding:"11px 14px",
+        color: value ? "#e8eaf0" : "#7a7f9a",
+        fontSize:15, outline:"none"
+      }}
+    >
+      <option value="">{placeholder || "선택"}</option>
+      {allList.map(l => <option key={l} value={l}>{l}</option>)}
+    </select>
   );
 }
 
