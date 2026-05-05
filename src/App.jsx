@@ -229,93 +229,99 @@ function AdminLock({ onUnlock, savedPw }) {
 }
 
 // ── 위치 입력 컴포넌트 ──────────────────────────────────────
-// 목록 팝업 + 직접입력 (첫글자 필터링)
 function LocButtons({ list, value, onChange, placeholder }) {
-  const [mode, setMode] = useState("select"); // "select" | "input"
+  const [showModal, setShowModal] = useState(false);
   const [query, setQuery] = useState("");
   const allList = list || [];
 
-  // 직접입력 모드에서 첫글자 필터
   const filtered = query.trim()
     ? allList.filter(l => l.startsWith(query.trim()))
     : allList;
 
-  // 선택 처리
-  const handleSelect = (e) => {
-    const v = e.target.value;
-    if (v === "__direct__") {
-      setMode("input");
-      setQuery("");
-      onChange("");
-    } else {
-      onChange(v);
-    }
+  const select = (l) => { onChange(l); setShowModal(false); setQuery(""); };
+  const openModal = (e) => {
+    if (e.target.value === "__direct__") { setShowModal(true); setQuery(""); onChange(""); }
+    else onChange(e.target.value);
   };
 
-  if (mode === "input") {
-    return (
-      <div>
-        <input
-          type="text"
-          value={query}
-          onChange={e => { setQuery(e.target.value); onChange(e.target.value); }}
-          placeholder="첫 글자 입력"
-          autoComplete="off"
-          autoCorrect="off"
-          autoCapitalize="off"
-          spellCheck={false}
-          style={{
-            width:"100%", background:"#22263a",
-            border:"1.5px solid #f5a623",
-            borderRadius:query && filtered.length > 0 ? "8px 8px 0 0" : 8,
-            padding:"9px 10px", color:"#e8eaf0", fontSize:14, outline:"none"
-          }}
-        />
-        {query.trim() && filtered.length > 0 && (
-          <div style={{
-            background:"#1a1d27", border:"1.5px solid #f5a623",
-            borderTop:"none", borderRadius:"0 0 8px 8px",
-            maxHeight:180, overflowY:"auto"
-          }}>
-            {filtered.map(l => (
-              <div key={l}
-                onTouchEnd={e => { e.preventDefault(); onChange(l); setQuery(l); setMode("select"); }}
-                onMouseDown={e => { e.preventDefault(); onChange(l); setQuery(l); setMode("select"); }}
-                style={{
-                  padding:"11px 12px", fontSize:14, cursor:"pointer",
-                  color:"#e8eaf0", borderBottom:"1px solid #2e325040",
-                  WebkitTapHighlightColor:"transparent"
-                }}>{l}</div>
-            ))}
-          </div>
-        )}
-        <button onMouseDown={e=>e.preventDefault()} onClick={()=>{ setMode("select"); setQuery(""); onChange(""); }}
-          style={{ background:"transparent", border:"none", color:"#7a7f9a", fontSize:11, marginTop:2, cursor:"pointer", padding:0 }}>
-          ← 목록으로
-        </button>
-      </div>
-    );
-  }
-
   return (
-    <select
-      value={value || ""}
-      onChange={handleSelect}
-      style={{
-        width:"100%", background:"#22263a",
-        border:`1.5px solid ${value ? "#f5a623" : "#2e3250"}`,
-        borderRadius:8, padding:"9px 10px",
-        color: value ? "#e8eaf0" : "#7a7f9a",
-        fontSize:14, outline:"none"
-      }}
-    >
-      <option value="">{placeholder || "선택"}</option>
-      {allList.map(l => <option key={l} value={l}>{l}</option>)}
-      <option value="__direct__">✏️ 직접입력...</option>
-    </select>
+    <>
+      <select value={value || ""} onChange={openModal}
+        style={{
+          width:"100%", background:"#22263a",
+          border:`1.5px solid ${value ? "#f5a623" : "#2e3250"}`,
+          borderRadius:8, padding:"9px 10px",
+          color: value ? "#e8eaf0" : "#7a7f9a",
+          fontSize:14, outline:"none"
+        }}>
+        <option value="">{placeholder || "선택"}</option>
+        {allList.map(l => <option key={l} value={l}>{l}</option>)}
+        <option value="__direct__">✏️ 직접입력...</option>
+      </select>
+
+      {showModal && (
+        <div style={{
+          position:"fixed", top:0, left:0, right:0, bottom:0, zIndex:9999,
+          background:"rgba(0,0,0,0.75)",
+          display:"flex", flexDirection:"column", justifyContent:"flex-start", paddingTop:80
+        }} onClick={() => { setShowModal(false); setQuery(""); }}>
+          <div style={{
+            background:"#1a1d27", margin:"0 16px",
+            borderRadius:14, overflow:"hidden",
+            boxShadow:"0 8px 32px rgba(0,0,0,0.8)"
+          }} onClick={e => e.stopPropagation()}>
+            <div style={{ padding:"12px 14px", borderBottom:"1px solid #2e3250" }}>
+              <input
+                type="text" value={query}
+                onChange={e => setQuery(e.target.value)}
+                placeholder="첫 글자를 입력하세요"
+                autoFocus
+                autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false}
+                style={{
+                  width:"100%", background:"#22263a",
+                  border:"1.5px solid #f5a623", borderRadius:10,
+                  padding:"11px 14px", color:"#e8eaf0", fontSize:15, outline:"none"
+                }}
+              />
+            </div>
+            <div style={{ maxHeight:320, overflowY:"auto" }}>
+              {filtered.length === 0 && (
+                <div style={{ padding:"16px", color:"#7a7f9a", fontSize:14, textAlign:"center" }}>일치하는 항목 없음</div>
+              )}
+              {filtered.map(l => (
+                <div key={l}
+                  onTouchEnd={e => { e.preventDefault(); select(l); }}
+                  onMouseDown={e => { e.preventDefault(); select(l); }}
+                  style={{
+                    padding:"14px 18px", fontSize:15, cursor:"pointer",
+                    color: value === l ? "#f5a623" : "#e8eaf0",
+                    background: value === l ? "#0f2a0f" : "transparent",
+                    fontWeight: value === l ? 700 : 400,
+                    borderBottom:"1px solid #2e325040",
+                    WebkitTapHighlightColor:"transparent"
+                  }}>{l}</div>
+              ))}
+              {query.trim() && !allList.includes(query.trim()) && (
+                <div
+                  onTouchEnd={e => { e.preventDefault(); select(query.trim()); }}
+                  onMouseDown={e => { e.preventDefault(); select(query.trim()); }}
+                  style={{
+                    padding:"14px 18px", fontSize:15, cursor:"pointer",
+                    color:"#f5a623", borderTop:"1px solid #2e3250",
+                    WebkitTapHighlightColor:"transparent"
+                  }}>✅ "{query.trim()}" 입력</div>
+              )}
+            </div>
+            <div style={{ padding:"12px", borderTop:"1px solid #2e3250", textAlign:"center" }}>
+              <button onClick={() => { setShowModal(false); setQuery(""); }}
+                style={{ background:"transparent", border:"none", color:"#7a7f9a", fontSize:14, cursor:"pointer" }}>취소</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   );
 }
-
 function ReportForm({ vehicles, locationHints, locations, records, onSave }) {
   const emptyWork = { material: "", qty: "", unit: "개" };
   const emptyTrip = { from: "", to: "", work: { ...emptyWork } };
