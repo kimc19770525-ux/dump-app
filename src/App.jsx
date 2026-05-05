@@ -22,7 +22,7 @@ const DEFAULT_VEHICLES = [
   "7785","7799","8367","8627","9145","9451"
 ];
 
-const MATERIALS = ["토사","뻘","불량토","마사","풍암","원석","선별암","모래","A","B","C","25mm","40mm","혼합","석분"];
+const MATERIALS = ["토사","뻘","불량토","마사","풍암","원석","선별암","모래","A","B","C","13mm","25mm","40mm","혼합","석분"];
 const UNITS = ["개","m³","톤"];
 const ADMIN_PW = "121512";
 const MATERIAL_COLORS = {
@@ -119,7 +119,7 @@ function WorkItem({ item, onChange }) {
             const isSelected = item.material === m;
             return (
               <button key={m} onClick={() => {
-                const M3_MATERIALS = ["모래","25mm","혼합","석분"];
+                const M3_MATERIALS = ["모래","13mm","25mm","40mm","혼합","석분"];
                 const isM3 = M3_MATERIALS.includes(m);
                 // m3 품목 선택시 단위 자동 m³, 수량 있으면 ×17 변환
                 const newQty = isM3 && item.qty ? String(Math.round(Number(item.qty) * 17)) : item.qty;
@@ -128,10 +128,10 @@ function WorkItem({ item, onChange }) {
               }} style={{
                 padding: "7px 13px", borderRadius: 20, fontSize: 13,
                 fontWeight: isSelected ? 700 : 400,
-                background: isSelected ? "#f5a623" : (mc ? mc.bg+"80" : "#1a1d27"),
-                color: isSelected ? "#000" : (mc ? mc.color : C.muted),
-                border: `1px solid ${isSelected ? "#f5a623" : (mc ? mc.color+"50" : C.border)}`,
-                boxShadow: isSelected ? "0 0 8px #f5a62380" : "none"
+                background: isSelected ? (["모래","13mm","25mm","40mm","혼합","석분"].includes(m) ? C.blue : "#f5a623") : (mc ? mc.bg+"80" : "#1a1d27"),
+                color: isSelected ? "#fff" : (["모래","13mm","25mm","40mm","혼합","석분"].includes(m) ? C.blue : (mc ? mc.color : C.muted)),
+                border: `1px solid ${isSelected ? (["모래","13mm","25mm","40mm","혼합","석분"].includes(m) ? C.blue : "#f5a623") : (mc ? mc.color+"50" : C.border)}`,
+                boxShadow: isSelected ? "0 0 8px rgba(68,114,196,0.5)" : "none"
               }}>{m}</button>
             );
           })}
@@ -141,11 +141,11 @@ function WorkItem({ item, onChange }) {
         <div style={{ flex: 2 }}>
           <div style={{ fontSize: 11, color: C.muted, marginBottom: 4 }}>수량</div>
           <input type="number" value={item.qty} onChange={e => {
-            const M3_MATERIALS = ["모래","25mm","혼합","석분"];
+            const M3_MATERIALS = ["모래","13mm","25mm","40mm","혼합","석분"];
             const raw = e.target.value;
             onChange({ ...item, qty: raw, unit: M3_MATERIALS.includes(item.material) ? "m³" : item.unit });
           }} onBlur={e => {
-            const M3_MATERIALS = ["모래","25mm","혼합","석분"];
+            const M3_MATERIALS = ["모래","13mm","25mm","40mm","혼합","석분"];
             const raw = e.target.value;
             if (M3_MATERIALS.includes(item.material) && raw && Number(raw) > 0 && Number(raw) <= 9) {
               onChange({ ...item, qty: String(Math.round(Number(raw) * 17)), unit: "m³" });
@@ -370,8 +370,8 @@ function ReportForm({ vehicles, locationHints, locations, records, onSave }) {
   };
 
   // 품목 선택 상태 (행별)
-  const MATERIALS = ["토사","뻘","불량토","마사","풍암","원석","선별암","모래","A","B","C","25mm","40mm","혼합","석분"];
-  const M3_MATS = ["모래","25mm","혼합","석분"];
+  const MATERIALS = ["토사","뻘","불량토","마사","풍암","원석","선별암","모래","A","B","C","13mm","25mm","40mm","혼합","석분"];
+  const M3_MATS = ["모래","13mm","25mm","40mm","혼합","석분"];
 
   const setMaterial = (i, m) => {
     const isM3 = M3_MATS.includes(m);
@@ -434,7 +434,7 @@ function ReportForm({ vehicles, locationHints, locations, records, onSave }) {
             {/* 품목 */}
             <div style={{ borderRight:`1px solid ${C.border}40`, padding:"4px 4px" }}>
               <select value={trip.work.material} onChange={e=>setMaterial(i,e.target.value)}
-                style={{ width:"100%", background:"transparent", border:"none", color: trip.work.material ? C.accent : C.muted, fontSize:13, outline:"none", fontWeight: trip.work.material ? 700 : 400 }}>
+                style={{ width:"100%", background:"transparent", border:"none", color: trip.work.material ? (["모래","13mm","25mm","40mm","혼합","석분"].includes(trip.work.material) ? C.blue : C.accent) : C.muted, fontSize:13, outline:"none", fontWeight: trip.work.material ? 700 : 400 }}>
                 <option value="">선택</option>
                 {MATERIALS.map(m=><option key={m} value={m}>{m}</option>)}
               </select>
