@@ -228,23 +228,90 @@ function AdminLock({ onUnlock, savedPw }) {
   );
 }
 
-// ── 위치 입력 컴포넌트 (네이티브 select — 품목과 동일 방식) ──
+// ── 위치 입력 컴포넌트 ──────────────────────────────────────
+// 목록 팝업 + 직접입력 (첫글자 필터링)
 function LocButtons({ list, value, onChange, placeholder }) {
+  const [mode, setMode] = useState("select"); // "select" | "input"
+  const [query, setQuery] = useState("");
   const allList = list || [];
+
+  // 직접입력 모드에서 첫글자 필터
+  const filtered = query.trim()
+    ? allList.filter(l => l.startsWith(query.trim()))
+    : allList;
+
+  // 선택 처리
+  const handleSelect = (e) => {
+    const v = e.target.value;
+    if (v === "__direct__") {
+      setMode("input");
+      setQuery("");
+      onChange("");
+    } else {
+      onChange(v);
+    }
+  };
+
+  if (mode === "input") {
+    return (
+      <div>
+        <input
+          type="text"
+          value={query}
+          onChange={e => { setQuery(e.target.value); onChange(e.target.value); }}
+          placeholder="첫 글자 입력"
+          autoComplete="off"
+          autoCorrect="off"
+          autoCapitalize="off"
+          spellCheck={false}
+          style={{
+            width:"100%", background:"#22263a",
+            border:"1.5px solid #f5a623",
+            borderRadius:query && filtered.length > 0 ? "8px 8px 0 0" : 8,
+            padding:"9px 10px", color:"#e8eaf0", fontSize:14, outline:"none"
+          }}
+        />
+        {query.trim() && filtered.length > 0 && (
+          <div style={{
+            background:"#1a1d27", border:"1.5px solid #f5a623",
+            borderTop:"none", borderRadius:"0 0 8px 8px",
+            maxHeight:180, overflowY:"auto"
+          }}>
+            {filtered.map(l => (
+              <div key={l}
+                onTouchEnd={e => { e.preventDefault(); onChange(l); setQuery(l); setMode("select"); }}
+                onMouseDown={e => { e.preventDefault(); onChange(l); setQuery(l); setMode("select"); }}
+                style={{
+                  padding:"11px 12px", fontSize:14, cursor:"pointer",
+                  color:"#e8eaf0", borderBottom:"1px solid #2e325040",
+                  WebkitTapHighlightColor:"transparent"
+                }}>{l}</div>
+            ))}
+          </div>
+        )}
+        <button onMouseDown={e=>e.preventDefault()} onClick={()=>{ setMode("select"); setQuery(""); onChange(""); }}
+          style={{ background:"transparent", border:"none", color:"#7a7f9a", fontSize:11, marginTop:2, cursor:"pointer", padding:0 }}>
+          ← 목록으로
+        </button>
+      </div>
+    );
+  }
+
   return (
     <select
       value={value || ""}
-      onChange={e => onChange(e.target.value)}
+      onChange={handleSelect}
       style={{
         width:"100%", background:"#22263a",
         border:`1.5px solid ${value ? "#f5a623" : "#2e3250"}`,
-        borderRadius:10, padding:"11px 14px",
+        borderRadius:8, padding:"9px 10px",
         color: value ? "#e8eaf0" : "#7a7f9a",
-        fontSize:15, outline:"none"
+        fontSize:14, outline:"none"
       }}
     >
       <option value="">{placeholder || "선택"}</option>
       {allList.map(l => <option key={l} value={l}>{l}</option>)}
+      <option value="__direct__">✏️ 직접입력...</option>
     </select>
   );
 }
