@@ -287,12 +287,39 @@ function ReportForm({ vehicles, locationHints, locations, records, onSave }) {
   const emptyWork = { material: "", qty: "", unit: "개" };
   const emptyTrip = { from: "", to: "", work: { ...emptyWork } };
 
-  const [date, setDate]       = useState(today());
-  const [vehicle, setVehicle] = useState("");
-  const [trips, setTrips]     = useState([{ ...emptyTrip }]);
-  const [memo, setMemo]       = useState("");
+  // localStorage에서 임시 저장 복원 (제출 전까지 유지)
+  const DRAFT_KEY = "dump_draft";
+  const loadDraft = () => {
+    try {
+      const d = JSON.parse(localStorage.getItem(DRAFT_KEY) || "{}");
+      // 날짜가 오늘이 아니면 초기화
+      if (d.date && d.date !== today()) return {};
+      return d;
+    } catch { return {}; }
+  };
+  const draft = loadDraft();
+
+  const [date, setDateRaw]    = useState(draft.date || today());
+  const [vehicle, setVehicleRaw] = useState(draft.vehicle || "");
+  const [trips, setTripsRaw]  = useState(draft.trips || [{ ...emptyTrip }]);
+  const [memo, setMemoRaw]    = useState(draft.memo || "");
   const [saved, setSaved]     = useState(false);
   const [err, setErr]         = useState("");
+
+  // 변경 시 localStorage 자동 저장
+  const saveDraft = (d, v, t, m) => {
+    try { localStorage.setItem(DRAFT_KEY, JSON.stringify({ date:d, vehicle:v, trips:t, memo:m })); } catch {}
+  };
+  const setDate    = v => { setDateRaw(v);    saveDraft(v, vehicle, trips, memo); };
+  const setVehicle = v => { setVehicleRaw(v); saveDraft(date, v, trips, memo); };
+  const setMemo    = v => { setMemoRaw(v);    saveDraft(date, vehicle, trips, v); };
+  const setTrips   = fn => {
+    setTripsRaw(prev => {
+      const next = typeof fn === "function" ? fn(prev) : fn;
+      saveDraft(date, vehicle, next, memo);
+      return next;
+    });
+  };
 
   // 상·하차지 목록: locations 스토리지 + 일보 기록 합산
   // 상차지: locations.from + 일보의 from만
@@ -336,64 +363,119 @@ function ReportForm({ vehicles, locationHints, locations, records, onSave }) {
     });
     setSaved(true);
     setTimeout(() => setSaved(false), 2500);
-    setVehicle(""); setTrips([{ ...emptyTrip }]); setMemo("");
+    // 제출 완료 후 임시저장 초기화
+    try { localStorage.removeItem("dump_draft"); } catch {}
+    setVehicleRaw(""); setTripsRaw([{ ...emptyTrip }]); setMemoRaw("");
+    saveDraft(today(), "", [{ ...emptyTrip }], "");
+  };
+
+  // 품목 선택 상태 (행별)
+  const MATERIALS = ["토사","뻘","불량토","마사","풍암","원석","선별암","모래","A","B","C","25mm","40mm","혼합","석분"];
+  const M3_MATS = ["모래","25mm","혼합","석분"];
+
+  const setMaterial = (i, m) => {
+    const isM3 = M3_MATS.includes(m);
+    updateWork(i, { ...trips[i].work, material: m, unit: isM3 ? "m³" : "개" });
+  };
+  const setQty = (i, q) => updateWork(i, { ...trips[i].work, qty: q });
+  const setQtyBlur = (i, q) => {
+    if (M3_MATS.includes(trips[i].work.material) && q && Number(q) > 0 && Number(q) <= 9) {
+      updateWork(i, { ...trips[i].work, qty: String(Math.round(Number(q)*17)), unit:"m³" });
+    }
   };
 
   return (
-    <div style={{ padding: "16px", maxWidth: 480, margin: "0 auto" }}>
-      <div style={{ marginBottom: 20, textAlign: "center" }}>
-        <div style={{ fontFamily: "'Bebas Neue'", fontSize: 38, color: C.accent, letterSpacing: 3 }}>DUMP LOG</div>
-        <div style={{ fontSize: 13, color: C.muted }}>덤프트럭 일일 작업 일보</div>
+    <div style={{ padding:"12px", maxWidth:520, margin:"0 auto" }}>
+      {/* 헤더 */}
+      <div style={{ textAlign:"center", marginBottom:14 }}>
+        <div style={{ fontFamily:"'Bebas Neue'", fontSize:32, color:C.accent, letterSpacing:3 }}>DUMP LOG</div>
       </div>
 
-      <Card style={{ marginBottom: 12 }}>
-        <Field label="날짜"><SI type="date" value={date} onChange={setDate} /></Field>
-        <Field label="차량번호 *">
-          <SS value={vehicle} onChange={setVehicle}>
+      {/* 날짜 + 차량 */}
+      <div style={{ display:"flex", gap:8, marginBottom:12 }}>
+        <div style={{ flex:1 }}>
+          <div style={{ fontSize:11, color:C.muted, marginBottom:4 }}>날짜</div>
+          <SI type="date" value={date} onChange={setDate} style={{ width:"100%", background:C.card2, border:`1.5px solid ${C.border}`, borderRadius:10, padding:"10px 12px", color:C.text, fontSize:14, outline:"none" }} />
+        </div>
+        <div style={{ flex:1 }}>
+          <div style={{ fontSize:11, color:C.muted, marginBottom:4 }}>차량번호 *</div>
+          <SS value={vehicle} onChange={setVehicle} style={{ width:"100%", background:C.card2, border:`1.5px solid ${vehicle?C.accent:C.border}`, borderRadius:10, padding:"10px 12px", color:C.text, fontSize:14, outline:"none" }}>
             <option value="">-- 선택 --</option>
             {vehicles.map(v => <option key={v}>{v}</option>)}
           </SS>
-        </Field>
-      </Card>
-
-      {trips.map((trip, i) => (
-        <div key={i} style={{ marginBottom: 10 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
-            <div style={{ fontSize: 13, color: C.accent, fontWeight: 700 }}>📍 현장 {i + 1}</div>
-            {trips.length > 1 && (
-              <button onClick={() => removeTrip(i)} style={{
-                background: C.danger+"20", border:`1px solid ${C.danger}40`,
-                borderRadius: 8, padding: "4px 10px", color: C.danger, fontSize: 12, cursor: "pointer", fontWeight: 700
-              }}>삭제</button>
-            )}
-          </div>
-          <Card style={{ padding: "14px" }}>
-            <Field label="상차지 *">
-              <LocButtons list={fromList} value={trip.from} onChange={v => updateTrip(i, "from", v)} placeholder="ex) 수방사" />
-            </Field>
-            <Field label="하차지 *">
-              <LocButtons list={toList} value={trip.to} onChange={v => updateTrip(i, "to", v)} placeholder="ex) 검단현장" />
-            </Field>
-            <WorkItem item={trip.work} onChange={v => updateWork(i, v)} />
-          </Card>
         </div>
-      ))}
+      </div>
 
+      {/* 표 형식 일보 */}
+      <div style={{ background:C.card2, border:`1.5px solid ${C.border}`, borderRadius:12, overflow:"hidden", marginBottom:12 }}>
+        {/* 헤더행 */}
+        <div style={{ display:"grid", gridTemplateColumns:"28px 1fr 1fr 80px 52px 36px", background:"#1a1d27", borderBottom:`1px solid ${C.border}` }}>
+          {["No","상차지","하차지","품목","수량",""].map((h,i) => (
+            <div key={i} style={{ padding:"8px 6px", fontSize:11, color:C.muted, fontWeight:700, textAlign:"center", borderRight: i<5 ? `1px solid ${C.border}40` : "none" }}>{h}</div>
+          ))}
+        </div>
+
+        {/* 데이터행 */}
+        {trips.map((trip, i) => (
+          <div key={i} style={{ display:"grid", gridTemplateColumns:"28px 1fr 1fr 80px 52px 36px", borderBottom: i<trips.length-1 ? `1px solid ${C.border}30` : "none", minHeight:48 }}>
+            {/* No */}
+            <div style={{ display:"flex", alignItems:"center", justifyContent:"center", fontSize:12, color:C.muted, fontWeight:700, borderRight:`1px solid ${C.border}40` }}>{i+1}</div>
+
+            {/* 상차지 */}
+            <div style={{ borderRight:`1px solid ${C.border}40`, padding:"4px 4px" }}>
+              <LocButtons list={fromList} value={trip.from} onChange={v=>updateTrip(i,"from",v)} placeholder="상차지" />
+            </div>
+
+            {/* 하차지 */}
+            <div style={{ borderRight:`1px solid ${C.border}40`, padding:"4px 4px" }}>
+              <LocButtons list={toList} value={trip.to} onChange={v=>updateTrip(i,"to",v)} placeholder="하차지" />
+            </div>
+
+            {/* 품목 */}
+            <div style={{ borderRight:`1px solid ${C.border}40`, padding:"4px 4px" }}>
+              <select value={trip.work.material} onChange={e=>setMaterial(i,e.target.value)}
+                style={{ width:"100%", background:"transparent", border:"none", color: trip.work.material ? C.accent : C.muted, fontSize:13, outline:"none", fontWeight: trip.work.material ? 700 : 400 }}>
+                <option value="">선택</option>
+                {MATERIALS.map(m=><option key={m} value={m}>{m}</option>)}
+              </select>
+            </div>
+
+            {/* 수량 */}
+            <div style={{ borderRight:`1px solid ${C.border}40`, padding:"4px 4px" }}>
+              <input type="number" value={trip.work.qty}
+                onChange={e=>setQty(i,e.target.value)}
+                onBlur={e=>setQtyBlur(i,e.target.value)}
+                placeholder="0"
+                style={{ width:"100%", background:"transparent", border:"none", color:C.text, fontSize:13, outline:"none", textAlign:"right" }} />
+            </div>
+
+            {/* 삭제 */}
+            <div style={{ display:"flex", alignItems:"center", justifyContent:"center" }}>
+              {trips.length > 1 ? (
+                <button onClick={()=>removeTrip(i)} style={{ background:"none", border:"none", color:C.danger, fontSize:18, cursor:"pointer", lineHeight:1 }}>×</button>
+              ) : <span />}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* 행 추가 버튼 */}
       {trips.length < 10 && (
         <button onClick={addTrip} style={{
-          width: "100%", padding: "12px", borderRadius: 12, cursor: "pointer",
-          background: "transparent", border: `2px dashed ${C.accent}50`,
-          color: C.accent, fontSize: 14, fontWeight: 700, marginBottom: 12
-        }}>+ 현장 추가 ({trips.length}/10)</button>
+          width:"100%", padding:"10px", borderRadius:10, cursor:"pointer",
+          background:"transparent", border:`2px dashed ${C.accent}40`,
+          color:C.accent, fontSize:13, fontWeight:700, marginBottom:12
+        }}>+ 행 추가 ({trips.length}/10)</button>
       )}
 
+      {/* 메모 + 제출 */}
       <Card>
         <Field label="메모">
-          <textarea value={memo} onChange={e => setMemo(e.target.value)} placeholder="특이사항 입력" rows={2}
-            style={{ width:"100%", background:C.card2, border:`1.5px solid ${C.border}`, borderRadius:10, padding:"11px 14px", color:C.text, fontSize:14, resize:"none", outline:"none" }} />
+          <textarea value={memo} onChange={e=>setMemo(e.target.value)} placeholder="특이사항" rows={2}
+            style={{ width:"100%", background:C.card2, border:`1.5px solid ${C.border}`, borderRadius:10, padding:"10px 12px", color:C.text, fontSize:14, resize:"none", outline:"none" }} />
         </Field>
-        {err && <div style={{ color: C.danger, fontSize: 13, marginBottom: 10 }}>{err}</div>}
-        <Btn onClick={submit} style={{ width: "100%" }}>
+        {err && <div style={{ color:C.danger, fontSize:13, marginBottom:10 }}>{err}</div>}
+        <Btn onClick={submit} style={{ width:"100%" }}>
           {saved ? "✅ 저장 완료!" : `일보 제출 (${trips.length}개 현장)`}
         </Btn>
       </Card>
@@ -1416,34 +1498,11 @@ function TodayReports({ todayRecs, todayStr }) {
 // 기사 화면 — 일보입력 + 오늘 제출내역
 // ════════════════════════════════════════════════════════════
 function DriverScreen({ vehicles, locationHints, locations, records, onSave, onRefresh }) {
-  const [tab, setTab] = useState("input"); // "input" | "today"
-
-  const todayStr = today();
-  // 오늘 제출한 일보 (차량 무관, 오늘 날짜 기준)
-  const todayRecs = records.filter(r => r.type === "report" && r.date === todayStr)
-    .slice().sort((a, b) => (b.savedAt||"").localeCompare(a.savedAt||""));
-
   return (
     <>
       <Nav />
-      {/* 탭 버튼 */}
-      <div style={{ display:"flex", background:C.card, borderBottom:`1px solid ${C.border}` }}>
-        {[["input","📝 일보입력"], ["today",`📋 오늘내역 (${todayRecs.length})`]].map(([k,l]) => (
-          <button key={k} onClick={() => { setTab(k); if(k==="today") onRefresh(); }} style={{
-            flex:1, padding:"12px 0", border:"none", borderBottom:`2.5px solid ${tab===k ? C.accent : "transparent"}`,
-            background:"transparent", color: tab===k ? C.accent : C.muted,
-            fontWeight: tab===k ? 700 : 400, fontSize:14, cursor:"pointer"
-          }}>{l}</button>
-        ))}
-      </div>
-
-      <div style={{ background:C.card, borderLeft:`1px solid ${C.border}`, borderRight:`1px solid ${C.border}`, minHeight:"calc(100vh - 150px)" }}>
-        {tab === "input" && (
-          <ReportForm vehicles={vehicles} locationHints={locationHints} locations={locations} records={records} onSave={onSave} />
-        )}
-        {tab === "today" && (
-          <TodayReports todayRecs={todayRecs} todayStr={todayStr} />
-        )}
+      <div style={{ background:C.card, borderLeft:`1px solid ${C.border}`, borderRight:`1px solid ${C.border}`, minHeight:"calc(100vh - 110px)" }}>
+        <ReportForm vehicles={vehicles} locationHints={locationHints} locations={locations} records={records} onSave={onSave} />
       </div>
     </>
   );
