@@ -445,58 +445,58 @@ function ReportForm({ vehicles, locationHints, locations, records, onSave }) {
         </div>
       </div>
 
-      {/* 표 형식 일보 */}
-      <div style={{ background:C.card2, border:`1.5px solid ${C.border}`, borderRadius:12, overflow:"visible", marginBottom:12 }}>
-        {/* 헤더행 */}
-        <div style={{ display:"grid", gridTemplateColumns:"28px 1fr 1fr 80px 52px 36px", background:"#1a1d27", borderBottom:`1px solid ${C.border}` }}>
-          {["No","상차지","하차지","품목","수량",""].map((h,i) => (
-            <div key={i} style={{ padding:"8px 6px", fontSize:11, color:C.muted, fontWeight:700, textAlign:"center", borderRight: i<5 ? `1px solid ${C.border}40` : "none" }}>{h}</div>
-          ))}
-        </div>
-
-        {/* 데이터행 */}
+      {/* 현장별 카드 */}
+      <div style={{ marginBottom:12 }}>
         {trips.map((trip, i) => (
-          <div key={i} style={{ display:"grid", gridTemplateColumns:"28px 1fr 1fr 80px 52px 36px", borderBottom: i<trips.length-1 ? `1px solid ${C.border}30` : "none", minHeight:48 }}>
-            {/* No */}
-            <div style={{ display:"flex", alignItems:"center", justifyContent:"center", fontSize:12, color:C.muted, fontWeight:700, borderRight:`1px solid ${C.border}40` }}>{i+1}</div>
-
-            {/* 상차지 */}
-            <div style={{ borderRight:`1px solid ${C.border}40`, padding:"4px 4px" }}>
-              <LocButtons list={fromList} value={trip.from} onChange={v=>updateTrip(i,"from",v)} placeholder="상차지" />
-            </div>
-
-            {/* 하차지 */}
-            <div style={{ borderRight:`1px solid ${C.border}40`, padding:"4px 4px" }}>
-              <LocButtons list={toList} value={trip.to} onChange={v=>updateTrip(i,"to",v)} placeholder="하차지" />
-            </div>
-
-            {/* 품목 */}
-            <div style={{ borderRight:`1px solid ${C.border}40`, padding:"4px 4px" }}>
-              <select value={trip.work.material} onChange={e=>setMaterial(i,e.target.value)}
-                style={{ width:"100%", background:"transparent", border:"none", color: trip.work.material ? (["모래","13mm","25mm","40mm","혼합","석분"].includes(trip.work.material) ? C.blue : C.accent) : C.muted, fontSize:13, outline:"none", fontWeight: trip.work.material ? 700 : 400 }}>
-                <option value="">선택</option>
-                {MATERIALS.map(m=><option key={m} value={m}>{m}</option>)}
-              </select>
-            </div>
-
-            {/* 수량 */}
-            <div style={{ borderRight:`1px solid ${C.border}40`, padding:"4px 4px" }}>
-              <input type="number" value={trip.work.qty}
-                onChange={e=>setQty(i,e.target.value)}
-                onBlur={e=>setQtyBlur(i,e.target.value)}
-                placeholder="0"
-                style={{ width:"100%", background:"transparent", border:"none", color:C.text, fontSize:13, outline:"none", textAlign:"right" }} />
-            </div>
-
-            {/* 삭제/초기화 */}
-            <div style={{ display:"flex", alignItems:"center", justifyContent:"center" }}>
+          <div key={i} style={{
+            background:C.card2, border:`1.5px solid ${C.border}`,
+            borderRadius:12, padding:"12px", marginBottom:8
+          }}>
+            {/* 번호 + 삭제 */}
+            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:10 }}>
+              <span style={{ fontSize:13, color:C.accent, fontWeight:700 }}>📍 현장 {i+1}</span>
               {trips.length > 1 ? (
-                <button onClick={()=>removeTrip(i)} style={{ background:"none", border:"none", color:C.danger, fontSize:20, cursor:"pointer", lineHeight:1, padding:"4px" }}>×</button>
+                <button onClick={()=>removeTrip(i)} style={{ background:"none", border:"none", color:C.danger, fontSize:20, cursor:"pointer", padding:0 }}>×</button>
               ) : (
-                <button onClick={()=>updateTrip(0,"from","") || updateTrip(0,"to","") || updateWork(0,{material:"",qty:"",unit:"개"})}
-                  onClick={()=>{ setTrips([{from:"",to:"",work:{material:"",qty:"",unit:"개"}}]); }}
-                  style={{ background:"none", border:"none", color:C.muted, fontSize:13, cursor:"pointer", lineHeight:1, padding:"4px" }}>↺</button>
+                <button onClick={()=>{ setTrips([{from:"",to:"",work:{material:"",qty:"",unit:"개"}}]); }}
+                  style={{ background:"none", border:"none", color:C.muted, fontSize:12, cursor:"pointer", padding:0 }}>↺ 초기화</button>
               )}
+            </div>
+
+            {/* 상차지 + 하차지 2열 */}
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginBottom:8 }}>
+              <div>
+                <div style={{ fontSize:11, color:C.muted, marginBottom:3 }}>상차지</div>
+                <LocButtons list={fromList} value={trip.from} onChange={v=>updateTrip(i,"from",v)} placeholder="선택" />
+                {trip.from && <div style={{ fontSize:12, color:C.blue, fontWeight:700, marginTop:3, paddingLeft:2 }}>{trip.from}</div>}
+              </div>
+              <div>
+                <div style={{ fontSize:11, color:C.muted, marginBottom:3 }}>하차지</div>
+                <LocButtons list={toList} value={trip.to} onChange={v=>updateTrip(i,"to",v)} placeholder="선택" />
+                {trip.to && <div style={{ fontSize:12, color:C.green, fontWeight:700, marginTop:3, paddingLeft:2 }}>{trip.to}</div>}
+              </div>
+            </div>
+
+            {/* 품목 + 수량 2열 */}
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 90px", gap:8 }}>
+              <div>
+                <div style={{ fontSize:11, color:C.muted, marginBottom:3 }}>품목</div>
+                <select value={trip.work.material} onChange={e=>setMaterial(i,e.target.value)}
+                  style={{ width:"100%", background:C.card, border:`1.5px solid ${C.border}`, borderRadius:8, padding:"9px 10px",
+                    color: trip.work.material ? (M3_MATS.includes(trip.work.material) ? C.blue : C.accent) : C.muted,
+                    fontSize:14, outline:"none", fontWeight: trip.work.material ? 700 : 400 }}>
+                  <option value="">선택</option>
+                  {MATERIALS.map(m=><option key={m} value={m}>{m}</option>)}
+                </select>
+              </div>
+              <div>
+                <div style={{ fontSize:11, color:C.muted, marginBottom:3 }}>수량</div>
+                <input type="number" value={trip.work.qty}
+                  onChange={e=>setQty(i,e.target.value)}
+                  onBlur={e=>setQtyBlur(i,e.target.value)}
+                  placeholder="0"
+                  style={{ width:"100%", background:C.card, border:`1.5px solid ${C.border}`, borderRadius:8, padding:"9px 10px", color:C.text, fontSize:14, outline:"none", textAlign:"center" }} />
+              </div>
             </div>
           </div>
         ))}
