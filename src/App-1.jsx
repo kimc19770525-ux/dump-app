@@ -22,7 +22,7 @@ const DEFAULT_VEHICLES = [
   "7785","7799","8367","8627","9145","9451"
 ];
 
-const MATERIALS = ["토사","뻘","불량토","마사","풍암","원석","선별암","모래","A","B","C","25mm","40mm","혼합","석분"];
+const MATERIALS = ["토사","뻘","불량토","마사","풍암","원석","선별암","모래","A","B","C","13mm","25mm","40mm","혼합","석분"];
 const UNITS = ["개","m³","톤"];
 const ADMIN_PW = "121512";
 const MATERIAL_COLORS = {
@@ -119,7 +119,7 @@ function WorkItem({ item, onChange }) {
             const isSelected = item.material === m;
             return (
               <button key={m} onClick={() => {
-                const M3_MATERIALS = ["모래","25mm","혼합","석분"];
+                const M3_MATERIALS = ["모래","13mm","25mm","40mm","혼합","석분"];
                 const isM3 = M3_MATERIALS.includes(m);
                 // m3 품목 선택시 단위 자동 m³, 수량 있으면 ×17 변환
                 const newQty = isM3 && item.qty ? String(Math.round(Number(item.qty) * 17)) : item.qty;
@@ -128,10 +128,10 @@ function WorkItem({ item, onChange }) {
               }} style={{
                 padding: "7px 13px", borderRadius: 20, fontSize: 13,
                 fontWeight: isSelected ? 700 : 400,
-                background: isSelected ? "#f5a623" : (mc ? mc.bg+"80" : "#1a1d27"),
-                color: isSelected ? "#000" : (mc ? mc.color : C.muted),
-                border: `1px solid ${isSelected ? "#f5a623" : (mc ? mc.color+"50" : C.border)}`,
-                boxShadow: isSelected ? "0 0 8px #f5a62380" : "none"
+                background: isSelected ? (["모래","13mm","25mm","40mm","혼합","석분"].includes(m) ? C.blue : "#f5a623") : (mc ? mc.bg+"80" : "#1a1d27"),
+                color: isSelected ? "#fff" : (["모래","13mm","25mm","40mm","혼합","석분"].includes(m) ? C.blue : (mc ? mc.color : C.muted)),
+                border: `1px solid ${isSelected ? (["모래","13mm","25mm","40mm","혼합","석분"].includes(m) ? C.blue : "#f5a623") : (mc ? mc.color+"50" : C.border)}`,
+                boxShadow: isSelected ? "0 0 8px rgba(68,114,196,0.5)" : "none"
               }}>{m}</button>
             );
           })}
@@ -141,11 +141,11 @@ function WorkItem({ item, onChange }) {
         <div style={{ flex: 2 }}>
           <div style={{ fontSize: 11, color: C.muted, marginBottom: 4 }}>수량</div>
           <input type="number" value={item.qty} onChange={e => {
-            const M3_MATERIALS = ["모래","25mm","혼합","석분"];
+            const M3_MATERIALS = ["모래","13mm","25mm","40mm","혼합","석분"];
             const raw = e.target.value;
             onChange({ ...item, qty: raw, unit: M3_MATERIALS.includes(item.material) ? "m³" : item.unit });
           }} onBlur={e => {
-            const M3_MATERIALS = ["모래","25mm","혼합","석분"];
+            const M3_MATERIALS = ["모래","13mm","25mm","40mm","혼합","석분"];
             const raw = e.target.value;
             if (M3_MATERIALS.includes(item.material) && raw && Number(raw) > 0 && Number(raw) <= 9) {
               onChange({ ...item, qty: String(Math.round(Number(raw) * 17)), unit: "m³" });
@@ -228,71 +228,137 @@ function AdminLock({ onUnlock, savedPw }) {
   );
 }
 
-// ── 위치 입력 컴포넌트 (네이티브 select + 직접입력) ──────────
+// ── 위치 입력 컴포넌트 ──────────────────────────────────────
 function LocButtons({ list, value, onChange, placeholder }) {
-  const [customMode, setCustomMode] = useState(false);
-  const [customVal, setCustomVal] = useState("");
+  const [showModal, setShowModal] = useState(false);
+  const [query, setQuery] = useState("");
   const allList = list || [];
 
-  useEffect(() => {
-    // value가 목록에 없으면 직접입력 모드
-    if (value && !allList.includes(value)) {
-      setCustomMode(true);
-      setCustomVal(value);
-    } else {
-      setCustomMode(false);
-      setCustomVal("");
-    }
-  }, [value]);
+  const filtered = query.trim()
+    ? allList.filter(l => l.startsWith(query.trim()))
+    : allList;
 
-  if (customMode) {
-    return (
-      <div style={{ display:"flex", gap:6 }}>
-        <input
-          type="text"
-          value={customVal}
-          onChange={e => { setCustomVal(e.target.value); onChange(e.target.value); }}
-          placeholder={placeholder || "직접 입력"}
-          autoComplete="off"
-          style={{ flex:1, background:"#22263a", border:"1.5px solid #f5a623", borderRadius:10, padding:"11px 14px", color:"#e8eaf0", fontSize:15, outline:"none" }}
-        />
-        <button onClick={() => { setCustomMode(false); onChange(""); }} style={{
-          background:"transparent", border:"1px solid #3a3f5a", borderRadius:10,
-          padding:"0 12px", color:"#7a7f9a", fontSize:13, cursor:"pointer"
-        }}>목록</button>
-      </div>
-    );
-  }
+  const select = (l) => { onChange(l); setShowModal(false); setQuery(""); };
+  const openModal = (e) => {
+    if (e.target.value === "__direct__") { setShowModal(true); setQuery(""); onChange(""); }
+    else onChange(e.target.value);
+  };
 
   return (
-    <div>
-      <select
-        value={value || ""}
-        onChange={e => {
-          const v = e.target.value;
-          if (v === "__custom__") { setCustomMode(true); setCustomVal(""); onChange(""); }
-          else onChange(v);
-        }}
-        style={{ width:"100%", background:"#22263a", border:`1.5px solid ${value?"#f5a623":"#2e3250"}`, borderRadius:10, padding:"11px 14px", color: value ? "#e8eaf0" : "#7a7f9a", fontSize:15, outline:"none" }}
-      >
-        <option value="">{placeholder || "눌러서 선택"}</option>
+    <>
+      <select value={value || ""} onChange={openModal}
+        style={{
+          width:"100%", background:"#22263a",
+          border:`1.5px solid ${value ? "#f5a623" : "#2e3250"}`,
+          borderRadius:8, padding:"9px 10px",
+          color: value ? "#e8eaf0" : "#7a7f9a",
+          fontSize:14, outline:"none"
+        }}>
+        <option value="">{placeholder || "선택"}</option>
         {allList.map(l => <option key={l} value={l}>{l}</option>)}
-        <option value="__custom__">✏️ 직접 입력...</option>
+        <option value="__direct__">✏️ 직접입력...</option>
       </select>
-    </div>
+
+      {showModal && (
+        <div style={{
+          position:"fixed", top:0, left:0, right:0, bottom:0, zIndex:9999,
+          background:"rgba(0,0,0,0.75)",
+          display:"flex", flexDirection:"column", justifyContent:"flex-start", paddingTop:80
+        }} onClick={() => { setShowModal(false); setQuery(""); }}>
+          <div style={{
+            background:"#1a1d27", margin:"0 16px",
+            borderRadius:14, overflow:"hidden",
+            boxShadow:"0 8px 32px rgba(0,0,0,0.8)"
+          }} onClick={e => e.stopPropagation()}>
+            <div style={{ padding:"12px 14px", borderBottom:"1px solid #2e3250" }}>
+              <input
+                type="text" value={query}
+                onChange={e => setQuery(e.target.value)}
+                placeholder="첫 글자를 입력하세요"
+                autoFocus
+                autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false}
+                style={{
+                  width:"100%", background:"#22263a",
+                  border:"1.5px solid #f5a623", borderRadius:10,
+                  padding:"11px 14px", color:"#e8eaf0", fontSize:15, outline:"none"
+                }}
+              />
+            </div>
+            <div style={{ maxHeight:320, overflowY:"auto" }}>
+              {filtered.length === 0 && (
+                <div style={{ padding:"16px", color:"#7a7f9a", fontSize:14, textAlign:"center" }}>일치하는 항목 없음</div>
+              )}
+              {filtered.map(l => (
+                <div key={l}
+                  onTouchEnd={e => { e.preventDefault(); select(l); }}
+                  onMouseDown={e => { e.preventDefault(); select(l); }}
+                  style={{
+                    padding:"14px 18px", fontSize:15, cursor:"pointer",
+                    color: value === l ? "#f5a623" : "#e8eaf0",
+                    background: value === l ? "#0f2a0f" : "transparent",
+                    fontWeight: value === l ? 700 : 400,
+                    borderBottom:"1px solid #2e325040",
+                    WebkitTapHighlightColor:"transparent"
+                  }}>{l}</div>
+              ))}
+              {query.trim() && !allList.includes(query.trim()) && (
+                <div
+                  onTouchEnd={e => { e.preventDefault(); select(query.trim()); }}
+                  onMouseDown={e => { e.preventDefault(); select(query.trim()); }}
+                  style={{
+                    padding:"14px 18px", fontSize:15, cursor:"pointer",
+                    color:"#f5a623", borderTop:"1px solid #2e3250",
+                    WebkitTapHighlightColor:"transparent"
+                  }}>✅ "{query.trim()}" 입력</div>
+              )}
+            </div>
+            <div style={{ padding:"12px", borderTop:"1px solid #2e3250", textAlign:"center" }}>
+              <button onClick={() => { setShowModal(false); setQuery(""); }}
+                style={{ background:"transparent", border:"none", color:"#7a7f9a", fontSize:14, cursor:"pointer" }}>취소</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   );
 }
-
 function ReportForm({ vehicles, locationHints, locations, records, onSave }) {
   const emptyWork = { material: "", qty: "", unit: "개" };
   const emptyTrip = { from: "", to: "", work: { ...emptyWork } };
 
-  const [date, setDate]       = useState(today());
-  const [vehicle, setVehicle] = useState("");
-  const [trips, setTrips]     = useState([{ ...emptyTrip }]);
-  const [memo, setMemo]       = useState("");
+  // localStorage에서 임시 저장 복원 (제출 전까지 유지)
+  const DRAFT_KEY = "dump_draft";
+  const loadDraft = () => {
+    try {
+      const d = JSON.parse(localStorage.getItem(DRAFT_KEY) || "{}");
+      // 날짜가 오늘이 아니면 초기화
+      if (d.date && d.date !== today()) return {};
+      return d;
+    } catch { return {}; }
+  };
+  const draft = loadDraft();
+
+  const [date, setDateRaw]    = useState(draft.date || today());
+  const [vehicle, setVehicleRaw] = useState(draft.vehicle || "");
+  const [trips, setTripsRaw]  = useState(draft.trips || [{ ...emptyTrip }]);
+  const [memo, setMemoRaw]    = useState(draft.memo || "");
   const [saved, setSaved]     = useState(false);
   const [err, setErr]         = useState("");
+
+  // 변경 시 localStorage 자동 저장
+  const saveDraft = (d, v, t, m) => {
+    try { localStorage.setItem(DRAFT_KEY, JSON.stringify({ date:d, vehicle:v, trips:t, memo:m })); } catch {}
+  };
+  const setDate    = v => { setDateRaw(v);    saveDraft(v, vehicle, trips, memo); };
+  const setVehicle = v => { setVehicleRaw(v); saveDraft(date, v, trips, memo); };
+  const setMemo    = v => { setMemoRaw(v);    saveDraft(date, vehicle, trips, v); };
+  const setTrips   = fn => {
+    setTripsRaw(prev => {
+      const next = typeof fn === "function" ? fn(prev) : fn;
+      saveDraft(date, vehicle, next, memo);
+      return next;
+    });
+  };
 
   // 상·하차지 목록: locations 스토리지 + 일보 기록 합산
   // 상차지: locations.from + 일보의 from만
@@ -336,64 +402,123 @@ function ReportForm({ vehicles, locationHints, locations, records, onSave }) {
     });
     setSaved(true);
     setTimeout(() => setSaved(false), 2500);
-    setVehicle(""); setTrips([{ ...emptyTrip }]); setMemo("");
+    // 제출 완료 후 임시저장 초기화
+    try { localStorage.removeItem("dump_draft"); } catch {}
+    setVehicleRaw(""); setTripsRaw([{ ...emptyTrip }]); setMemoRaw("");
+    saveDraft(today(), "", [{ ...emptyTrip }], "");
+  };
+
+  // 품목 선택 상태 (행별)
+  const MATERIALS = ["토사","뻘","불량토","마사","풍암","원석","선별암","모래","A","B","C","13mm","25mm","40mm","혼합","석분"];
+  const M3_MATS = ["모래","13mm","25mm","40mm","혼합","석분"];
+
+  const setMaterial = (i, m) => {
+    const isM3 = M3_MATS.includes(m);
+    updateWork(i, { ...trips[i].work, material: m, unit: isM3 ? "m³" : "개" });
+  };
+  const setQty = (i, q) => updateWork(i, { ...trips[i].work, qty: q });
+  const setQtyBlur = (i, q) => {
+    if (M3_MATS.includes(trips[i].work.material) && q && Number(q) > 0 && Number(q) <= 9) {
+      updateWork(i, { ...trips[i].work, qty: String(Math.round(Number(q)*17)), unit:"m³" });
+    }
   };
 
   return (
-    <div style={{ padding: "16px", maxWidth: 480, margin: "0 auto" }}>
-      <div style={{ marginBottom: 20, textAlign: "center" }}>
-        <div style={{ fontFamily: "'Bebas Neue'", fontSize: 38, color: C.accent, letterSpacing: 3 }}>DUMP LOG</div>
-        <div style={{ fontSize: 13, color: C.muted }}>덤프트럭 일일 작업 일보</div>
+    <div style={{ padding:"12px", maxWidth:520, margin:"0 auto" }}>
+      {/* 헤더 */}
+      <div style={{ textAlign:"center", marginBottom:14 }}>
+        <div style={{ fontFamily:"'Bebas Neue'", fontSize:32, color:C.accent, letterSpacing:3 }}>DUMP LOG</div>
       </div>
 
-      <Card style={{ marginBottom: 12 }}>
-        <Field label="날짜"><SI type="date" value={date} onChange={setDate} /></Field>
-        <Field label="차량번호 *">
-          <SS value={vehicle} onChange={setVehicle}>
+      {/* 날짜 + 차량 */}
+      <div style={{ display:"flex", gap:8, marginBottom:12 }}>
+        <div style={{ flex:1 }}>
+          <div style={{ fontSize:11, color:C.muted, marginBottom:4 }}>날짜</div>
+          <SI type="date" value={date} onChange={setDate} style={{ width:"100%", background:C.card2, border:`1.5px solid ${C.border}`, borderRadius:10, padding:"10px 12px", color:C.text, fontSize:14, outline:"none" }} />
+        </div>
+        <div style={{ flex:1 }}>
+          <div style={{ fontSize:11, color:C.muted, marginBottom:4 }}>차량번호 *</div>
+          <SS value={vehicle} onChange={setVehicle} style={{ width:"100%", background:C.card2, border:`1.5px solid ${vehicle?C.accent:C.border}`, borderRadius:10, padding:"10px 12px", color:C.text, fontSize:14, outline:"none" }}>
             <option value="">-- 선택 --</option>
             {vehicles.map(v => <option key={v}>{v}</option>)}
           </SS>
-        </Field>
-      </Card>
-
-      {trips.map((trip, i) => (
-        <div key={i} style={{ marginBottom: 10 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
-            <div style={{ fontSize: 13, color: C.accent, fontWeight: 700 }}>📍 현장 {i + 1}</div>
-            {trips.length > 1 && (
-              <button onClick={() => removeTrip(i)} style={{
-                background: C.danger+"20", border:`1px solid ${C.danger}40`,
-                borderRadius: 8, padding: "4px 10px", color: C.danger, fontSize: 12, cursor: "pointer", fontWeight: 700
-              }}>삭제</button>
-            )}
-          </div>
-          <Card style={{ padding: "14px" }}>
-            <Field label="상차지 *">
-              <LocButtons list={fromList} value={trip.from} onChange={v => updateTrip(i, "from", v)} placeholder="ex) 수방사" />
-            </Field>
-            <Field label="하차지 *">
-              <LocButtons list={toList} value={trip.to} onChange={v => updateTrip(i, "to", v)} placeholder="ex) 검단현장" />
-            </Field>
-            <WorkItem item={trip.work} onChange={v => updateWork(i, v)} />
-          </Card>
         </div>
-      ))}
+      </div>
 
+      {/* 현장별 카드 */}
+      <div style={{ marginBottom:12 }}>
+        {trips.map((trip, i) => (
+          <div key={i} style={{
+            background:C.card2, border:`1.5px solid ${C.border}`,
+            borderRadius:12, padding:"12px", marginBottom:8
+          }}>
+            {/* 번호 + 삭제 */}
+            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:10 }}>
+              <span style={{ fontSize:13, color:C.accent, fontWeight:700 }}>📍 현장 {i+1}</span>
+              {trips.length > 1 ? (
+                <button onClick={()=>removeTrip(i)} style={{ background:"none", border:"none", color:C.danger, fontSize:20, cursor:"pointer", padding:0 }}>×</button>
+              ) : (
+                <button onClick={()=>{ setTrips([{from:"",to:"",work:{material:"",qty:"",unit:"개"}}]); }}
+                  style={{ background:"none", border:"none", color:C.muted, fontSize:12, cursor:"pointer", padding:0 }}>↺ 초기화</button>
+              )}
+            </div>
+
+            {/* 상차지 + 하차지 2열 */}
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginBottom:8 }}>
+              <div>
+                <div style={{ fontSize:11, color:C.muted, marginBottom:3 }}>상차지</div>
+                <LocButtons list={fromList} value={trip.from} onChange={v=>updateTrip(i,"from",v)} placeholder="선택" />
+                {trip.from && <div style={{ fontSize:12, color:C.blue, fontWeight:700, marginTop:3, paddingLeft:2 }}>{trip.from}</div>}
+              </div>
+              <div>
+                <div style={{ fontSize:11, color:C.muted, marginBottom:3 }}>하차지</div>
+                <LocButtons list={toList} value={trip.to} onChange={v=>updateTrip(i,"to",v)} placeholder="선택" />
+                {trip.to && <div style={{ fontSize:12, color:C.green, fontWeight:700, marginTop:3, paddingLeft:2 }}>{trip.to}</div>}
+              </div>
+            </div>
+
+            {/* 품목 + 수량 2열 */}
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 90px", gap:8 }}>
+              <div>
+                <div style={{ fontSize:11, color:C.muted, marginBottom:3 }}>품목</div>
+                <select value={trip.work.material} onChange={e=>setMaterial(i,e.target.value)}
+                  style={{ width:"100%", background:C.card, border:`1.5px solid ${C.border}`, borderRadius:8, padding:"9px 10px",
+                    color: trip.work.material ? (M3_MATS.includes(trip.work.material) ? C.blue : C.accent) : C.muted,
+                    fontSize:14, outline:"none", fontWeight: trip.work.material ? 700 : 400 }}>
+                  <option value="">선택</option>
+                  {MATERIALS.map(m=><option key={m} value={m}>{m}</option>)}
+                </select>
+              </div>
+              <div>
+                <div style={{ fontSize:11, color:C.muted, marginBottom:3 }}>수량</div>
+                <input type="number" value={trip.work.qty}
+                  onChange={e=>setQty(i,e.target.value)}
+                  onBlur={e=>setQtyBlur(i,e.target.value)}
+                  placeholder="0"
+                  style={{ width:"100%", background:C.card, border:`1.5px solid ${C.border}`, borderRadius:8, padding:"9px 10px", color:C.text, fontSize:14, outline:"none", textAlign:"center" }} />
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* 행 추가 버튼 */}
       {trips.length < 10 && (
         <button onClick={addTrip} style={{
-          width: "100%", padding: "12px", borderRadius: 12, cursor: "pointer",
-          background: "transparent", border: `2px dashed ${C.accent}50`,
-          color: C.accent, fontSize: 14, fontWeight: 700, marginBottom: 12
-        }}>+ 현장 추가 ({trips.length}/10)</button>
+          width:"100%", padding:"10px", borderRadius:10, cursor:"pointer",
+          background:"transparent", border:`2px dashed ${C.accent}40`,
+          color:C.accent, fontSize:13, fontWeight:700, marginBottom:12
+        }}>+ 행 추가 ({trips.length}/10)</button>
       )}
 
+      {/* 메모 + 제출 */}
       <Card>
         <Field label="메모">
-          <textarea value={memo} onChange={e => setMemo(e.target.value)} placeholder="특이사항 입력" rows={2}
-            style={{ width:"100%", background:C.card2, border:`1.5px solid ${C.border}`, borderRadius:10, padding:"11px 14px", color:C.text, fontSize:14, resize:"none", outline:"none" }} />
+          <textarea value={memo} onChange={e=>setMemo(e.target.value)} placeholder="특이사항" rows={2}
+            style={{ width:"100%", background:C.card2, border:`1.5px solid ${C.border}`, borderRadius:10, padding:"10px 12px", color:C.text, fontSize:14, resize:"none", outline:"none" }} />
         </Field>
-        {err && <div style={{ color: C.danger, fontSize: 13, marginBottom: 10 }}>{err}</div>}
-        <Btn onClick={submit} style={{ width: "100%" }}>
+        {err && <div style={{ color:C.danger, fontSize:13, marginBottom:10 }}>{err}</div>}
+        <Btn onClick={submit} style={{ width:"100%" }}>
           {saved ? "✅ 저장 완료!" : `일보 제출 (${trips.length}개 현장)`}
         </Btn>
       </Card>
@@ -870,15 +995,7 @@ function MappingTab({ mappings, setMappings, records }) {
             <div style={{ marginBottom: 12 }}>
               <div style={{ fontSize: 12, color: C.blue, fontWeight: 700, marginBottom: 8 }}>↑ 상차지 기준</div>
               {fromMappings.map(m => (
-                <div key={m.id} style={{ display:"flex", alignItems:"center", justifyContent:"space-between", background:C.card2, borderRadius:10, padding:"10px 14px", marginBottom:6 }}>
-                  <div style={{ fontSize:14 }}>
-                    <span style={{ color:C.blue, fontWeight:700 }}>{m.location}</span>
-                    <span style={{ color:C.muted, margin:"0 8px" }}>→</span>
-                    <span style={{ fontWeight:700 }}>{m.client}</span>
-                  </div>
-                  <button type="button" onClick={()=>setMappings(prev=>prev.filter(x=>x.id!==m.id))}
-                    style={{ background:"none", border:"none", color:C.danger, cursor:"pointer", fontSize:18, lineHeight:1 }}>×</button>
-                </div>
+                <MappingRow key={m.id} m={m} color={C.blue} onDelete={()=>setMappings(prev=>prev.filter(x=>x.id!==m.id))} onEdit={(id,newClient)=>setMappings(prev=>prev.map(x=>x.id===id?{...x,client:newClient}:x))} />
               ))}
             </div>
           )}
@@ -887,20 +1004,47 @@ function MappingTab({ mappings, setMappings, records }) {
             <div>
               <div style={{ fontSize: 12, color: C.green, fontWeight: 700, marginBottom: 8 }}>↓ 하차지 기준 (예외)</div>
               {toMappings.map(m => (
-                <div key={m.id} style={{ display:"flex", alignItems:"center", justifyContent:"space-between", background:C.card2, borderRadius:10, padding:"10px 14px", marginBottom:6 }}>
-                  <div style={{ fontSize:14 }}>
-                    <span style={{ color:C.green, fontWeight:700 }}>{m.location}</span>
-                    <span style={{ color:C.muted, margin:"0 8px" }}>→</span>
-                    <span style={{ fontWeight:700 }}>{m.client}</span>
-                  </div>
-                  <button type="button" onClick={()=>setMappings(prev=>prev.filter(x=>x.id!==m.id))}
-                    style={{ background:"none", border:"none", color:C.danger, cursor:"pointer", fontSize:18, lineHeight:1 }}>×</button>
-                </div>
+                <MappingRow key={m.id} m={m} color={C.green} onDelete={()=>setMappings(prev=>prev.filter(x=>x.id!==m.id))} onEdit={(id,newClient)=>setMappings(prev=>prev.map(x=>x.id===id?{...x,client:newClient}:x))} />
               ))}
             </div>
           )}
         </Card>
       )}
+    </div>
+  );
+}
+
+// ── 매핑 행 컴포넌트 (수정/삭제)
+function MappingRow({ m, color, onDelete, onEdit }) {
+  const [editing, setEditing] = useState(false);
+  const [val, setVal] = useState(m.client);
+
+  const save = () => { if(val.trim()) { onEdit(m.id, val.trim()); setEditing(false); } };
+
+  if (editing) {
+    return (
+      <div style={{ display:"flex", gap:6, alignItems:"center", background:C.card2, borderRadius:10, padding:"8px 10px", marginBottom:6 }}>
+        <span style={{ color, fontWeight:700, fontSize:13, whiteSpace:"nowrap" }}>{m.location}</span>
+        <span style={{ color:C.muted }}>→</span>
+        <input value={val} onChange={e=>setVal(e.target.value)} autoFocus
+          style={{ flex:1, background:"#1a1d27", border:`1.5px solid ${color}`, borderRadius:8, padding:"6px 10px", color:C.text, fontSize:13, outline:"none" }} />
+        <button onClick={save} style={{ background:color, border:"none", borderRadius:8, padding:"6px 12px", color:"#000", fontWeight:700, fontSize:12, cursor:"pointer" }}>저장</button>
+        <button onClick={()=>setEditing(false)} style={{ background:"transparent", border:`1px solid ${C.border}`, borderRadius:8, padding:"6px 10px", color:C.muted, fontSize:12, cursor:"pointer" }}>취소</button>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", background:C.card2, borderRadius:10, padding:"10px 14px", marginBottom:6 }}>
+      <div style={{ fontSize:14 }}>
+        <span style={{ color, fontWeight:700 }}>{m.location}</span>
+        <span style={{ color:C.muted, margin:"0 8px" }}>→</span>
+        <span style={{ fontWeight:700 }}>{m.client}</span>
+      </div>
+      <div style={{ display:"flex", gap:6 }}>
+        <button onClick={()=>setEditing(true)} style={{ background:C.blue+"20", border:`1px solid ${C.blue}40`, borderRadius:8, padding:"4px 10px", color:C.blue, fontSize:12, cursor:"pointer" }}>✏️</button>
+        <button onClick={onDelete} style={{ background:"none", border:"none", color:C.danger, cursor:"pointer", fontSize:18, lineHeight:1 }}>×</button>
+      </div>
     </div>
   );
 }
@@ -1397,34 +1541,11 @@ function TodayReports({ todayRecs, todayStr }) {
 // 기사 화면 — 일보입력 + 오늘 제출내역
 // ════════════════════════════════════════════════════════════
 function DriverScreen({ vehicles, locationHints, locations, records, onSave, onRefresh }) {
-  const [tab, setTab] = useState("input"); // "input" | "today"
-
-  const todayStr = today();
-  // 오늘 제출한 일보 (차량 무관, 오늘 날짜 기준)
-  const todayRecs = records.filter(r => r.type === "report" && r.date === todayStr)
-    .slice().sort((a, b) => (b.savedAt||"").localeCompare(a.savedAt||""));
-
   return (
     <>
       <Nav />
-      {/* 탭 버튼 */}
-      <div style={{ display:"flex", background:C.card, borderBottom:`1px solid ${C.border}` }}>
-        {[["input","📝 일보입력"], ["today",`📋 오늘내역 (${todayRecs.length})`]].map(([k,l]) => (
-          <button key={k} onClick={() => { setTab(k); if(k==="today") onRefresh(); }} style={{
-            flex:1, padding:"12px 0", border:"none", borderBottom:`2.5px solid ${tab===k ? C.accent : "transparent"}`,
-            background:"transparent", color: tab===k ? C.accent : C.muted,
-            fontWeight: tab===k ? 700 : 400, fontSize:14, cursor:"pointer"
-          }}>{l}</button>
-        ))}
-      </div>
-
-      <div style={{ background:C.card, borderLeft:`1px solid ${C.border}`, borderRight:`1px solid ${C.border}`, minHeight:"calc(100vh - 150px)" }}>
-        {tab === "input" && (
-          <ReportForm vehicles={vehicles} locationHints={locationHints} locations={locations} records={records} onSave={onSave} />
-        )}
-        {tab === "today" && (
-          <TodayReports todayRecs={todayRecs} todayStr={todayStr} />
-        )}
+      <div style={{ background:C.card, borderLeft:`1px solid ${C.border}`, borderRight:`1px solid ${C.border}`, minHeight:"calc(100vh - 110px)" }}>
+        <ReportForm vehicles={vehicles} locationHints={locationHints} locations={locations} records={records} onSave={onSave} />
       </div>
     </>
   );
@@ -1502,10 +1623,14 @@ function AdminDash({ records, vehicles, setVehicles, mappings, setMappings, pric
   const fineRecs      = records.filter(r => r.type === "fine"      && inRange(r));
 
   const getClients = (rec) => {
+    // 하차지 예외 매핑 먼저 확인 — 있으면 상차지 매핑 무시하고 하차지로만
+    const toMatch = mappings.find(m => m.type === "to" && m.location === rec.to);
+    if (toMatch) return [toMatch.client];
+
+    // 상차지 기준 매핑
     const result = [];
     mappings.forEach(m => {
       if (m.type === "from" && rec.from === m.location && !result.includes(m.client)) result.push(m.client);
-      if (m.type === "to"   && rec.to   === m.location && !result.includes(m.client)) result.push(m.client);
     });
     return result;
   };
@@ -1528,13 +1653,11 @@ function AdminDash({ records, vehicles, setVehicles, mappings, setMappings, pric
     });
   });
 
-  // 미매핑 현장 추출
+  // 미매핑 현장 추출 — 상차지 기준으로만 (하차지는 예외일 때만 매핑하므로 체크 안 함)
   const unmappedMap = {};
   reportRecs.forEach(r => {
     const fromMapped = mappings.some(m => m.type === "from" && m.location === r.from);
-    const toMapped   = mappings.some(m => m.type === "to"   && m.location === r.to);
     if (!fromMapped && r.from) unmappedMap[`from::${r.from}`] = { loc: r.from, type: "from" };
-    if (!toMapped   && r.to)   unmappedMap[`to::${r.to}`]     = { loc: r.to,   type: "to" };
   });
   const unmappedLocs = Object.values(unmappedMap);
 
@@ -1561,31 +1684,23 @@ function AdminDash({ records, vehicles, setVehicles, mappings, setMappings, pric
     } : undefined
   });
 
-  // ── 업체별 청구서 xlsx — 4월은석.xlsx 양식 그대로 ──────────
-  const downloadByClient = (closingType) => {
-    const XLSX = window.XLSX;
-    if (!XLSX) { alert("잠시 후 다시 시도해주세요."); return; }
+  // ── 업체별 청구서 xlsx — ExcelJS, 3번 사진 양식 (갑지+을지) ──────
+  const downloadByClient = async (closingType) => {
+    const ExcelJS = window.ExcelJS;
+    if (!ExcelJS) { alert("ExcelJS 라이브러리가 로드되지 않았습니다. 페이지를 새로고침해주세요."); return; }
 
-    // 기간 계산
     const now = new Date();
     const y = now.getFullYear(), m = now.getMonth();
-    let sD, eD, sheetName;
+    let sD, eD;
     if (closingType === "mid") {
-      // 25일 마감: 전월26일 ~ 당월25일
-      sD = localDate(y, m - 1, 26);
-      eD = localDate(y, m, 25);
-      sheetName = "25일";
+      sD = localDate(y, m - 1, 26); eD = localDate(y, m, 25);
     } else {
-      // 말일 마감: 당월1일 ~ 당월말일
-      sD = localDate(y, m, 1);
-      eD = localDate(y, m + 1, 0);
-      sheetName = "말일";
+      sD = localDate(y, m, 1); eD = localDate(y, m + 1, 0);
     }
 
     const inR = r => r.date >= sD && r.date <= eD;
     const recs = records.filter(r => r.type === "report" && inR(r) && r.status !== "pending");
 
-    // 업체별 분류
     const byCl = {};
     recs.forEach(r => {
       const clients = getClients(r);
@@ -1596,246 +1711,478 @@ function AdminDash({ records, vehicles, setVehicles, mappings, setMappings, pric
     const clientList = Object.entries(byCl).filter(([c]) => c !== "(미매핑)");
     if (clientList.length === 0) { alert("청구할 업체가 없습니다."); return; }
 
-    const wb = XLSX.utils.book_new();
+    const wb = new ExcelJS.Workbook();
+    wb.creator = "다솔중기";
+    wb.created = new Date();
 
-    // 양식 스타일 헬퍼 (맑은 고딕, thin 테두리)
-    const thin = { style: "thin", color: { rgb: "000000" } };
-    const bdr = { top: thin, bottom: thin, left: thin, right: thin };
-    const noBdr = {};
-    const S = (bold, align, sz, bg) => ({
-      font: { name: "맑은 고딕", bold: !!bold, sz: sz || 10 },
-      alignment: { horizontal: align || "left", vertical: "center", wrapText: false },
-      fill: bg ? { fgColor: { rgb: bg }, patternType: "solid" } : { patternType: "none" },
-    });
-    const SB = (bold, align, sz, bg) => ({ ...S(bold, align, sz, bg), border: bdr });
+    // 스타일 헬퍼
+    const thinBorder = {
+      top:    { style: "thin", color: { argb: "FF000000" } },
+      bottom: { style: "thin", color: { argb: "FF000000" } },
+      left:   { style: "thin", color: { argb: "FF000000" } },
+      right:  { style: "thin", color: { argb: "FF000000" } }
+    };
+    const yellowFill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFFFF00" } };
 
-    const C2 = (ws, addr, val, style) => {
-      ws[addr] = { v: val, t: typeof val === "number" ? "n" : "s", s: style };
-    };
-    const CF = (ws, addr, formula, style) => {
-      ws[addr] = { f: formula, t: "n", s: style };
-    };
-    const CD = (ws, addr, dateVal, style) => {
-      ws[addr] = { v: dateVal, t: "d", z: "yyyy-mm-dd", s: style };
+    // 월/일 → "M-D" 포맷
+    const fmtMD = (dateStr) => {
+      if (!dateStr) return "";
+      const parts = dateStr.split("-");
+      return `${parseInt(parts[1])}-${parseInt(parts[2])}`;
     };
 
     clientList.forEach(([client, rows]) => {
-      const ws = {};
-      ws["!merges"] = [];
+      const ws = wb.addWorksheet(client.slice(0, 31), {
+        pageSetup: { paperSize: 9, orientation: "portrait", fitToPage: true, fitToWidth: 1, fitToHeight: 0 }
+      });
 
-      // 열너비: C~L 기준 (A,B 여백)
-      ws["!cols"] = [
-        { wch: 4.875 }, // A
-        { wch: 5.125 }, // B
-        { wch: 6.0 },   // C
-        { wch: 6.0 },   // D
-        { wch: 12.125 },// E
-        { wch: 10.0 },  // F
-        { wch: 6.0 },   // G
-        { wch: 7.375 }, // H
-        { wch: 6.0 },   // I
-        { wch: 9.875 }, // J
-        { wch: 12.0 },  // K
-        { wch: 12.25 }, // L
+      // 열너비 (B~M, 12개 열)
+      ws.columns = [
+        { width: 2.5 },   // A
+        { width: 5 },     // B 월/일
+        { width: 6 },     // C no.
+        { width: 12 },    // D 상차지
+        { width: 12 },    // E 하차지
+        { width: 7 },     // F 품명
+        { width: 7 },     // G 수량
+        { width: 7 },     // H ㎥
+        { width: 11 },    // I 단가
+        { width: 13 },    // J 금액
+        { width: 11 },    // K 비고
+        { width: 2.5 }    // L 우측 여백
       ];
 
-      // ── 행1: 거래명세서 제목
-      ws["!merges"].push({ s: { r: 0, c: 2 }, e: { r: 0, c: 11 } });
-      C2(ws, "C1", "거 래 명 세 서", S(true, "center", 16));
+      // ═══════════════════════════════════════════════
+      // 갑지 (1~37행)
+      // ═══════════════════════════════════════════════
 
-      // ── 행3: 일자 / 공급자
-      ws["!merges"].push({ s: { r: 2, c: 2 }, e: { r: 2, c: 4 } });
-      ws["!merges"].push({ s: { r: 2, c: 4 }, e: { r: 2, c: 5 } });
-      ws["!merges"].push({ s: { r: 2, c: 8 }, e: { r: 2, c: 9 } });
-      ws["!merges"].push({ s: { r: 2, c: 10 }, e: { r: 2, c: 11 } });
-      C2(ws, "C3", "일        자:", S(false));
-      C2(ws, "E3", eD, S(false));
-      C2(ws, "I3", "공 급 자:", S(false));
-      C2(ws, "K3", "㈜ 다 솔 중 기", S(true));
+      // 행1: 제목 "거 래 명 세 서"
+      ws.mergeCells("B1:K1");
+      const titleCell = ws.getCell("B1");
+      titleCell.value = "거 래 명 세 서";
+      titleCell.font = { name: "맑은 고딕", size: 16, bold: true };
+      titleCell.alignment = { horizontal: "center", vertical: "middle" };
+      titleCell.border = {
+        top: { style: "medium", color: { argb: "FF2E7D32" } },
+        left: { style: "medium", color: { argb: "FF2E7D32" } },
+        right: { style: "medium", color: { argb: "FF2E7D32" } },
+        bottom: { style: "thin", color: { argb: "FF000000" } }
+      };
+      ws.getRow(1).height = 30;
+      ws.getRow(2).height = 8;
 
-      // ── 행5: 공급받는자
-      ws["!merges"].push({ s: { r: 4, c: 2 }, e: { r: 4, c: 4 } });
-      ws["!merges"].push({ s: { r: 4, c: 4 }, e: { r: 4, c: 7 } });
-      ws["!merges"].push({ s: { r: 4, c: 8 }, e: { r: 4, c: 10 } });
-      ws["!merges"].push({ s: { r: 4, c: 11 }, e: { r: 4, c: 11 } });
-      C2(ws, "C5", "공급받는자:", S(false));
-      C2(ws, "E5", client, S(true));
-      C2(ws, "I5", "759-88-00944", S(false));
-      C2(ws, "L5", "최 기 희", S(false));
+      // 행3: 일자 / 공급자 박스
+      ws.mergeCells("B3:C3");
+      ws.getCell("B3").value = "일        자:";
+      ws.getCell("B3").font = { name: "맑은 고딕", size: 10, underline: true };
+      ws.getCell("B3").alignment = { horizontal: "left", vertical: "middle" };
 
-      // ── 행7: 금액
-      ws["!merges"].push({ s: { r: 6, c: 2 }, e: { r: 6, c: 4 } });
-      ws["!merges"].push({ s: { r: 6, c: 4 }, e: { r: 6, c: 5 } });
-      ws["!merges"].push({ s: { r: 6, c: 8 }, e: { r: 6, c: 11 } });
-      C2(ws, "C7", "금        액:", S(false));
-      CF(ws, "E7", "K45-K43", S(true));
-      C2(ws, "I7", "인천시 서구 청라에메랄드로 112 웰카운티 226동 1602호", S(false, "left", 9));
+      ws.mergeCells("D3:F3");
+      const dateCell = ws.getCell("D3");
+      const [yy, mm, dd] = eD.split("-").map(Number);
+      dateCell.value = `${yy}년 ${mm}월 ${dd}일`;
+      dateCell.font = { name: "맑은 고딕", size: 10 };
+      dateCell.alignment = { horizontal: "left", vertical: "middle" };
 
-      // ── 행8: 전화
-      ws["!merges"].push({ s: { r: 7, c: 8 }, e: { r: 7, c: 11 } });
-      C2(ws, "I8", "T:032-564-2306  F:032-566-2306", S(false, "left", 9));
+      // 공급자 박스 (G3:K8)
+      ws.mergeCells("G3:H3");
+      ws.getCell("G3").value = "공 급 자:";
+      ws.getCell("G3").font = { name: "맑은 고딕", size: 10, bold: true };
+      ws.getCell("G3").alignment = { horizontal: "center", vertical: "middle" };
 
-      // ── 행9: 청구내역 레이블
-      ws["!merges"].push({ s: { r: 8, c: 2 }, e: { r: 8, c: 11 } });
-      C2(ws, "C9", "청구내역:", S(true));
+      ws.mergeCells("I3:K3");
+      ws.getCell("I3").value = "㈜ 다 솔 중 기";
+      ws.getCell("I3").font = { name: "맑은 고딕", size: 10, bold: true };
+      ws.getCell("I3").alignment = { horizontal: "center", vertical: "middle" };
 
-      // ── 행11: 헤더
-      ["월/일", "no.", "상차지", "하차지", "품명", "수량", "㎥", "단가", "금액", "비고"].forEach((h, i) => {
-        C2(ws, `${String.fromCharCode(67 + i)}11`, h, SB(true, "center", 10, "D9D9D9"));
-      });
+      ws.mergeCells("G5:H5");
+      ws.getCell("G5").value = "759-88-00944";
+      ws.getCell("G5").font = { name: "맑은 고딕", size: 10 };
+      ws.getCell("G5").alignment = { horizontal: "center", vertical: "middle" };
+      ws.mergeCells("I5:K5");
+      ws.getCell("I5").value = "최 기 희";
+      ws.getCell("I5").font = { name: "맑은 고딕", size: 10 };
+      ws.getCell("I5").alignment = { horizontal: "center", vertical: "middle" };
 
-      // ── 행12: 간격
-      // ── 행13~40: 요약 데이터 (상차지+하차지+품목 그룹)
-      const summaryMap = {};
-      rows.forEach(row => {
-        const key = `${row.from}||${row.to}||${row.work?.material}`;
-        if (!summaryMap[key]) summaryMap[key] = { from: row.from, to: row.to, mat: row.work?.material, qty: 0, qtyM3: 0 };
-        if (row.work?.unit === "㎥" || row.work?.unit === "m³") summaryMap[key].qtyM3 += Number(row.work?.qty) || 0;
-        else summaryMap[key].qty += Number(row.work?.qty) || 0;
-      });
+      ws.mergeCells("G7:K7");
+      ws.getCell("G7").value = "인천시 서구 청라임로 109 호반1차 259동 1103호";
+      ws.getCell("G7").font = { name: "맑은 고딕", size: 9 };
+      ws.getCell("G7").alignment = { horizontal: "center", vertical: "middle" };
+      ws.mergeCells("G8:K8");
+      ws.getCell("G8").value = "T:032-564-2306  F:032-566-2306";
+      ws.getCell("G8").font = { name: "맑은 고딕", size: 9 };
+      ws.getCell("G8").alignment = { horizontal: "center", vertical: "middle" };
 
-      let dataRow = 13;
-      Object.values(summaryMap).forEach(s => {
-        const r = dataRow;
-        C2(ws, `C${r}`, "", SB(false));
-        C2(ws, `D${r}`, "", SB(false));
-        C2(ws, `E${r}`, s.from || "", SB(false));
-        C2(ws, `F${r}`, s.to || "", SB(false));
-        C2(ws, `G${r}`, s.mat || "", SB(false));
-        if (s.qty) { ws[`H${r}`] = { v: s.qty, t: "n", s: SB(false, "right") }; }
-        else { C2(ws, `H${r}`, "", SB(false, "right")); }
-        if (s.qtyM3) { ws[`I${r}`] = { v: s.qtyM3, t: "n", s: SB(false, "right") }; }
-        else { C2(ws, `I${r}`, "", SB(false, "right")); }
-        C2(ws, `J${r}`, "", SB(false, "right"));
-        CF(ws, `K${r}`, `IF(H${r}<>"",J${r}*H${r},I${r}*J${r})`, SB(false, "right"));
-        C2(ws, `L${r}`, "", SB(false));
-        dataRow++;
-      });
-
-      // 빈행으로 40행까지 채우기
-      while (dataRow <= 40) {
-        const r = dataRow;
-        ["C","D","E","F","G","H","I","J","K","L"].forEach(col => C2(ws, `${col}${r}`, "", SB(false)));
-        dataRow++;
+      // 공급자 박스 테두리
+      for (let r = 3; r <= 8; r++) {
+        for (let c = 7; c <= 11; c++) {
+          const cell = ws.getCell(r, c);
+          cell.border = {
+            top:    r === 3 ? { style: "medium", color: { argb: "FF000000" } } : (cell.border?.top || undefined),
+            bottom: r === 8 ? { style: "medium", color: { argb: "FF000000" } } : (cell.border?.bottom || undefined),
+            left:   c === 7 ? { style: "medium", color: { argb: "FF000000" } } : (cell.border?.left || undefined),
+            right:  c === 11 ? { style: "medium", color: { argb: "FF000000" } } : (cell.border?.right || undefined)
+          };
+        }
       }
 
-      // ── 행41~42: 계
-      ws["!merges"].push({ s: { r: 40, c: 2 }, e: { r: 41, c: 6 } });
-      ws["!merges"].push({ s: { r: 40, c: 10 }, e: { r: 41, c: 11 } });
-      C2(ws, "C41", "  계", SB(true));
-      CF(ws, "H41", "SUM(H13:H40)", SB(true, "right"));
-      CF(ws, "I41", "SUBTOTAL(9,I13:I40)", SB(true, "right"));
-      C2(ws, "J41", "", SB(true, "right"));
-      CF(ws, "K41", "SUM(K13:K40)", SB(true, "right"));
+      // 행5: 공급받는자
+      ws.mergeCells("B5:C5");
+      ws.getCell("B5").value = "공급받는자:";
+      ws.getCell("B5").font = { name: "맑은 고딕", size: 10, underline: true };
+      ws.getCell("B5").alignment = { horizontal: "left", vertical: "middle" };
 
-      // ── 행43: 빈행 (K42 레퍼런스 맞추기)
-      ws["!merges"].push({ s: { r: 42, c: 2 }, e: { r: 42, c: 6 } });
-      ws["!merges"].push({ s: { r: 42, c: 7 }, e: { r: 42, c: 9 } });
-      ws["!merges"].push({ s: { r: 42, c: 10 }, e: { r: 42, c: 11 } });
-      C2(ws, "C43", "", SB(false));
-      C2(ws, "H43", "", SB(false));
-      C2(ws, "K43", "", SB(false));
+      ws.mergeCells("D5:F5");
+      ws.getCell("D5").value = client;
+      ws.getCell("D5").font = { name: "맑은 고딕", size: 10, bold: true };
+      ws.getCell("D5").alignment = { horizontal: "left", vertical: "middle" };
 
-      // ── 행44: 공급가/부가세
-      ws["!merges"].push({ s: { r: 43, c: 2 }, e: { r: 43, c: 6 } });
-      ws["!merges"].push({ s: { r: 43, c: 7 }, e: { r: 43, c: 9 } });
-      ws["!merges"].push({ s: { r: 43, c: 10 }, e: { r: 43, c: 11 } });
-      C2(ws, "C44", "공급가/부가세", SB(false));
-      CF(ws, "H44", "K41-K43", SB(false, "right"));
-      CF(ws, "K44", "H44*0.1", SB(false, "right"));
+      // 행7: 금액
+      ws.mergeCells("B7:C7");
+      ws.getCell("B7").value = "금        액:";
+      ws.getCell("B7").font = { name: "맑은 고딕", size: 10, underline: true };
+      ws.getCell("B7").alignment = { horizontal: "left", vertical: "middle" };
 
-      // ── 행45: 총계
-      ws["!merges"].push({ s: { r: 44, c: 2 }, e: { r: 44, c: 6 } });
-      ws["!merges"].push({ s: { r: 44, c: 7 }, e: { r: 44, c: 9 } });
-      ws["!merges"].push({ s: { r: 44, c: 10 }, e: { r: 44, c: 11 } });
-      C2(ws, "C45", "총    계", SB(true));
-      CF(ws, "H45", "SUM(H41:H42)", SB(true, "right"));
-      CF(ws, "I45", "SUM(I41:I42)", SB(true, "right"));
-      CF(ws, "K45", "H44+K44", SB(true, "right"));
+      ws.mergeCells("D7:F7");
+      const moneyCell = ws.getCell("D7");
+      moneyCell.value = { formula: `J33`, result: 0 };
+      moneyCell.numFmt = '"₩"#,##0';
+      moneyCell.font = { name: "맑은 고딕", size: 11, bold: true };
+      moneyCell.alignment = { horizontal: "left", vertical: "middle" };
 
-      // ── 행46~47: 담당자확인 / 계좌
-      ws["!merges"].push({ s: { r: 45, c: 2 }, e: { r: 46, c: 4 } });
-      ws["!merges"].push({ s: { r: 45, c: 5 }, e: { r: 45, c: 5 } });
-      ws["!merges"].push({ s: { r: 45, c: 6 }, e: { r: 46, c: 11 } });
-      C2(ws, "C46", "담당자확인", S(false));
-      C2(ws, "G46", "* 아래 계좌로 입금부탁드립니다 *", S(true, "center", 10, "FFFF00"));
+      // 행9: 청구내역
+      ws.getCell("B9").value = "청구내역:";
+      ws.getCell("B9").font = { name: "맑은 고딕", size: 10, bold: true };
+      ws.getCell("B9").alignment = { horizontal: "left", vertical: "middle" };
 
-      // ── 행48: 계좌번호
-      ws["!merges"].push({ s: { r: 47, c: 2 }, e: { r: 47, c: 11 } });
-      C2(ws, "C48", "결재계좌번호: 955-024478-01-011  기업은행  ㈜ 다솔중기", S(true, "left", 11));
+      // 행10 빈줄
+      ws.getRow(10).height = 5;
 
-      // ── 행50: 빈행
+      // ─────────────────────────────────────────────
+      // 갑지 데이터 그룹핑: 상차지+하차지+품명 키
+      // ─────────────────────────────────────────────
+      const groupMap = new Map();
+      rows.forEach(r => {
+        const from = r.from || "";
+        const to = r.to || "";
+        const mat = r.work?.material || "";
+        const unit = r.work?.unit || "";
+        const isM3 = unit === "㎥" || unit === "m³";
+        const qty = Number(r.work?.qty) || 0;
+        const price = getPrice(from, to, mat) || 0;
+        const key = `${from}||${to}||${mat}`;
+        const dayNum = r.date ? parseInt(r.date.split("-")[2]) : null;
 
-      // ── 행51: 업체명
-      ws["!merges"].push({ s: { r: 50, c: 2 }, e: { r: 50, c: 11 } });
-      CF(ws, "C51", "E5", S(true, "left", 12));
-
-      // ── 행52: 청구리스트 타이틀
-      ws["!merges"].push({ s: { r: 51, c: 2 }, e: { r: 51, c: 11 } });
-      const monthLabel = `( ${eD.slice(0, 7).replace("-", "년 ")}월 청구 리스트)`;
-      C2(ws, "C52", monthLabel, S(false));
-
-      // ── 행53: 상세 헤더 (파란 배경)
-      ["월/일", "no.", "상차지", "하차지", "품명", "수량", "㎥", "단가", "금액", "비고"].forEach((h, i) => {
-        C2(ws, `${String.fromCharCode(67 + i)}53`, h, SB(true, "center", 10, "4472C4"));
+        if (!groupMap.has(key)) {
+          groupMap.set(key, {
+            from, to, mat, isM3, price,
+            qtySum: 0, m3Sum: 0,
+            firstDay: dayNum
+          });
+        }
+        const g = groupMap.get(key);
+        if (isM3) g.m3Sum += qty;
+        else g.qtySum += qty;
+        if (dayNum !== null && (g.firstDay === null || dayNum < g.firstDay)) g.firstDay = dayNum;
+      });
+      const groups = Array.from(groupMap.values()).sort((a, b) => {
+        if (a.firstDay !== b.firstDay) return (a.firstDay || 0) - (b.firstDay || 0);
+        return a.from.localeCompare(b.from);
       });
 
-      // ── 행54~: 상세 데이터 (날짜순)
-      let detailRow = 54;
-      const sortedRows = rows.slice().sort((a, b) => a.date.localeCompare(b.date));
-      
-      // 그룹별로 묶기 (상차지+하차지+품목)
-      const groupMap = {};
-      sortedRows.forEach(row => {
-        const key = `${row.from}||${row.to}||${row.work?.material}`;
-        if (!groupMap[key]) groupMap[key] = [];
-        groupMap[key].push(row);
+      // 행11: 헤더
+      const headerRow = 11;
+      const headers = ["월/일", "no.", "상차지", "하차지", "품명", "수량", "㎥", "단가", "금액", "비고"];
+      headers.forEach((h, i) => {
+        const cell = ws.getCell(headerRow, 2 + i);
+        cell.value = h;
+        cell.font = { name: "맑은 고딕", size: 10, bold: true };
+        cell.alignment = { horizontal: "center", vertical: "middle" };
+        cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFE7E6E6" } };
+        cell.border = thinBorder;
+      });
+      ws.getRow(headerRow).height = 22;
+
+      // 행12~28 (총 17행) 데이터 영역
+      const DATA_START = 12;
+      const DATA_END = 28;
+      const DATA_ROWS = DATA_END - DATA_START + 1;
+
+      for (let i = 0; i < DATA_ROWS; i++) {
+        const r = DATA_START + i;
+        const g = groups[i];
+        ws.getRow(r).height = 18;
+
+        for (let c = 2; c <= 11; c++) {
+          ws.getCell(r, c).border = thinBorder;
+          ws.getCell(r, c).font = { name: "맑은 고딕", size: 10 };
+          ws.getCell(r, c).alignment = { vertical: "middle", horizontal: "center" };
+        }
+
+        if (g) {
+          // B 월/일: 비워둠 (3번 사진은 갑지 월/일 빈칸)
+          // C no.: 비워둠
+          ws.getCell(r, 4).value = g.from;       // D 상차지
+          ws.getCell(r, 4).alignment = { horizontal: "center", vertical: "middle" };
+          ws.getCell(r, 5).value = g.to;         // E 하차지
+          ws.getCell(r, 5).alignment = { horizontal: "center", vertical: "middle" };
+          ws.getCell(r, 6).value = g.mat;        // F 품명
+          if (!g.isM3 && g.qtySum) {
+            ws.getCell(r, 7).value = g.qtySum;   // G 수량
+          }
+          if (g.isM3 && g.m3Sum) {
+            ws.getCell(r, 8).value = g.m3Sum;    // H ㎥
+          }
+          if (g.price) {
+            ws.getCell(r, 9).value = g.price;    // I 단가
+            ws.getCell(r, 9).numFmt = "#,##0";
+            ws.getCell(r, 9).alignment = { horizontal: "right", vertical: "middle" };
+          }
+          // J 금액 = 수량(G or H) * 단가(I)
+          ws.getCell(r, 10).value = { formula: `IF(G${r}="",H${r},G${r})*I${r}` };
+          ws.getCell(r, 10).numFmt = "#,##0";
+          ws.getCell(r, 10).alignment = { horizontal: "right", vertical: "middle" };
+        } else {
+          // 빈 행도 금액에 0 표시 (3번 사진처럼)
+          ws.getCell(r, 10).value = 0;
+          ws.getCell(r, 10).numFmt = "#,##0";
+          ws.getCell(r, 10).alignment = { horizontal: "right", vertical: "middle" };
+        }
+      }
+
+      // 행29: 계
+      ws.mergeCells(`B29:F29`);
+      ws.getCell("B29").value = "계";
+      ws.getCell("B29").font = { name: "맑은 고딕", size: 11, bold: true };
+      ws.getCell("B29").alignment = { horizontal: "center", vertical: "middle" };
+      ws.getCell("B29").border = thinBorder;
+
+      ws.getCell("G29").value = { formula: `SUM(G${DATA_START}:G${DATA_END})` };
+      ws.getCell("G29").numFmt = "#,##0";
+      ws.getCell("G29").font = { name: "맑은 고딕", size: 10, bold: true };
+      ws.getCell("G29").alignment = { horizontal: "center", vertical: "middle" };
+      ws.getCell("G29").border = thinBorder;
+
+      ws.getCell("H29").value = { formula: `SUM(H${DATA_START}:H${DATA_END})` };
+      ws.getCell("H29").numFmt = "#,##0";
+      ws.getCell("H29").font = { name: "맑은 고딕", size: 10, bold: true };
+      ws.getCell("H29").alignment = { horizontal: "center", vertical: "middle" };
+      ws.getCell("H29").border = thinBorder;
+
+      ws.getCell("I29").border = thinBorder;
+      ws.mergeCells("J29:K29");
+      ws.getCell("J29").value = { formula: `SUM(J${DATA_START}:J${DATA_END})` };
+      ws.getCell("J29").numFmt = "#,##0";
+      ws.getCell("J29").font = { name: "맑은 고딕", size: 11, bold: true };
+      ws.getCell("J29").alignment = { horizontal: "right", vertical: "middle" };
+      ws.getCell("J29").border = thinBorder;
+      ws.getCell("K29").border = thinBorder;
+      ws.getRow(29).height = 22;
+
+      // 행30~31: 빈 행 (테두리만)
+      for (let r = 30; r <= 31; r++) {
+        for (let c = 2; c <= 11; c++) {
+          ws.getCell(r, c).border = thinBorder;
+        }
+        ws.getRow(r).height = 16;
+      }
+
+      // 행32: 공급가/부가세
+      ws.mergeCells("B32:F32");
+      ws.getCell("B32").value = "공급가/부가세";
+      ws.getCell("B32").font = { name: "맑은 고딕", size: 10 };
+      ws.getCell("B32").alignment = { horizontal: "center", vertical: "middle" };
+      ws.getCell("B32").border = thinBorder;
+
+      for (let c = 7; c <= 8; c++) ws.getCell(32, c).border = thinBorder;
+
+      ws.getCell("I32").value = { formula: `J29` };
+      ws.getCell("I32").numFmt = "#,##0";
+      ws.getCell("I32").font = { name: "맑은 고딕", size: 10 };
+      ws.getCell("I32").alignment = { horizontal: "right", vertical: "middle" };
+      ws.getCell("I32").border = thinBorder;
+
+      ws.mergeCells("J32:K32");
+      ws.getCell("J32").value = { formula: `J29*0.1` };
+      ws.getCell("J32").numFmt = "#,##0";
+      ws.getCell("J32").font = { name: "맑은 고딕", size: 10 };
+      ws.getCell("J32").alignment = { horizontal: "right", vertical: "middle" };
+      ws.getCell("J32").border = thinBorder;
+      ws.getCell("K32").border = thinBorder;
+      ws.getRow(32).height = 20;
+
+      // 행33: 총계
+      ws.mergeCells("B33:F33");
+      ws.getCell("B33").value = "총    계";
+      ws.getCell("B33").font = { name: "맑은 고딕", size: 11, bold: true };
+      ws.getCell("B33").alignment = { horizontal: "center", vertical: "middle" };
+      ws.getCell("B33").border = thinBorder;
+
+      ws.getCell("G33").value = { formula: `G29` };
+      ws.getCell("G33").font = { name: "맑은 고딕", size: 10, bold: true };
+      ws.getCell("G33").alignment = { horizontal: "center", vertical: "middle" };
+      ws.getCell("G33").border = thinBorder;
+
+      ws.getCell("H33").value = { formula: `H29` };
+      ws.getCell("H33").font = { name: "맑은 고딕", size: 10, bold: true };
+      ws.getCell("H33").alignment = { horizontal: "center", vertical: "middle" };
+      ws.getCell("H33").border = thinBorder;
+
+      ws.getCell("I33").border = thinBorder;
+      ws.mergeCells("J33:K33");
+      ws.getCell("J33").value = { formula: `I32+J32` };
+      ws.getCell("J33").numFmt = "#,##0";
+      ws.getCell("J33").font = { name: "맑은 고딕", size: 11, bold: true };
+      ws.getCell("J33").alignment = { horizontal: "right", vertical: "middle" };
+      ws.getCell("J33").border = thinBorder;
+      ws.getCell("K33").border = thinBorder;
+      ws.getRow(33).height = 22;
+
+      // 행34~35: 담당자확인 / 안내문
+      ws.mergeCells("B34:D35");
+      ws.getCell("B34").value = "담당자확인";
+      ws.getCell("B34").font = { name: "맑은 고딕", size: 11, bold: true };
+      ws.getCell("B34").alignment = { horizontal: "center", vertical: "middle" };
+      ws.getCell("B34").border = thinBorder;
+      ws.getCell("E34").border = thinBorder;
+      ws.getCell("E35").border = thinBorder;
+
+      ws.mergeCells("F34:K35");
+      ws.getCell("F34").value = "* 아래 계좌로 입금부탁드립니다 *";
+      ws.getCell("F34").font = { name: "맑은 고딕", size: 11, bold: true };
+      ws.getCell("F34").alignment = { horizontal: "center", vertical: "middle" };
+      ws.getCell("F34").border = thinBorder;
+      ws.getRow(34).height = 18;
+      ws.getRow(35).height = 18;
+
+      // 행36: 계좌번호
+      ws.mergeCells("B36:K36");
+      ws.getCell("B36").value = "결재계좌번호: 955-024478-01-011  기업은행  ㈜ 다솔중기";
+      ws.getCell("B36").font = { name: "맑은 고딕", size: 11, bold: true };
+      ws.getCell("B36").alignment = { horizontal: "center", vertical: "middle" };
+      ws.getRow(36).height = 22;
+      ws.getRow(37).height = 8;
+      ws.getRow(38).height = 8;
+
+      // ═══════════════════════════════════════════════
+      // 을지 (39행~) — 청구 리스트 (개별+소계)
+      // ═══════════════════════════════════════════════
+
+      // 행39: 업체명
+      ws.mergeCells("B39:K39");
+      ws.getCell("B39").value = client;
+      ws.getCell("B39").font = { name: "맑은 고딕", size: 12, bold: true };
+      ws.getCell("B39").alignment = { horizontal: "center", vertical: "middle" };
+      ws.getCell("B39").border = thinBorder;
+      ws.getRow(39).height = 22;
+
+      // 행40: 청구 리스트 타이틀
+      ws.mergeCells("B40:K40");
+      const monthLabel = `${parseInt(eD.slice(5, 7))}월`;
+      ws.getCell("B40").value = `( ${monthLabel} 청구 리스트 )`;
+      ws.getCell("B40").font = { name: "맑은 고딕", size: 11, bold: true };
+      ws.getCell("B40").alignment = { horizontal: "center", vertical: "middle" };
+      ws.getCell("B40").border = thinBorder;
+      ws.getRow(40).height = 20;
+
+      // 행41: 헤더
+      const sub_headerRow = 41;
+      headers.forEach((h, i) => {
+        const cell = ws.getCell(sub_headerRow, 2 + i);
+        cell.value = h;
+        cell.font = { name: "맑은 고딕", size: 10, bold: true };
+        cell.alignment = { horizontal: "center", vertical: "middle" };
+        cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFE7E6E6" } };
+        cell.border = thinBorder;
+      });
+      ws.getRow(sub_headerRow).height = 22;
+
+      // ─────────────────────────────────────────────
+      // 을지: 그룹별로 개별 행 + 소계행(노란 배경)
+      // ─────────────────────────────────────────────
+      // 그룹 키별로 원본 row들 모음
+      const detailGroupMap = new Map();
+      rows.forEach(r => {
+        const from = r.from || "";
+        const to = r.to || "";
+        const mat = r.work?.material || "";
+        const unit = r.work?.unit || "";
+        const isM3 = unit === "㎥" || unit === "m³";
+        const dayNum = r.date ? parseInt(r.date.split("-")[2]) : 0;
+        const key = `${from}||${to}||${mat}`;
+        if (!detailGroupMap.has(key)) {
+          detailGroupMap.set(key, { from, to, mat, isM3, items: [], firstDay: dayNum });
+        }
+        const g = detailGroupMap.get(key);
+        g.items.push(r);
+        if (dayNum && (g.firstDay === 0 || dayNum < g.firstDay)) g.firstDay = dayNum;
+      });
+      const detailGroups = Array.from(detailGroupMap.values()).sort((a, b) => {
+        if (a.firstDay !== b.firstDay) return (a.firstDay || 0) - (b.firstDay || 0);
+        return a.from.localeCompare(b.from);
       });
 
-      const groupKeys = [...new Set(sortedRows.map(r => `${r.from}||${r.to}||${r.work?.material}`))];
-      groupKeys.forEach(key => {
-        const gRows = groupMap[key];
-        gRows.forEach(row => {
-          const day = row.date ? Number(row.date.slice(8)) : "";
-          const r = detailRow;
-          ws[`C${r}`] = { v: day, t: day ? "n" : "s", s: SB(false, "right") };
-          C2(ws, `D${r}`, row.vehicle || "", SB(false));
-          C2(ws, `E${r}`, row.from || "", SB(false));
-          C2(ws, `F${r}`, row.to || "", SB(false));
-          C2(ws, `G${r}`, row.work?.material || "", SB(false));
-          const qty = Number(row.work?.qty) || 0;
-          const isM3 = row.work?.unit === "㎥" || row.work?.unit === "m³";
-          if (!isM3 && qty) { ws[`H${r}`] = { v: qty, t: "n", s: SB(false, "right") }; }
-          else { C2(ws, `H${r}`, "", SB(false, "right")); }
-          if (isM3 && qty) { ws[`I${r}`] = { v: qty, t: "n", s: SB(false, "right") }; }
-          else { C2(ws, `I${r}`, "", SB(false, "right")); }
-          C2(ws, `J${r}`, "", SB(false, "right"));
-          C2(ws, `K${r}`, "", SB(false, "right"));
-          C2(ws, `L${r}`, "", SB(false));
-          detailRow++;
+      let curRow = 42;
+      const SUB_DETAIL_START = curRow;
+
+      detailGroups.forEach((g) => {
+        // 그룹 내 일자 오름차순 정렬
+        g.items.sort((a, b) => (a.date || "").localeCompare(b.date || ""));
+
+        g.items.forEach(r => {
+          ws.getRow(curRow).height = 17;
+          for (let c = 2; c <= 11; c++) {
+            const cell = ws.getCell(curRow, c);
+            cell.border = thinBorder;
+            cell.font = { name: "맑은 고딕", size: 10 };
+            cell.alignment = { vertical: "middle", horizontal: "center" };
+          }
+          ws.getCell(curRow, 2).value = fmtMD(r.date);   // B 월/일
+          ws.getCell(curRow, 3).value = r.vehicle || ""; // C no. (차량번호!)
+          ws.getCell(curRow, 4).value = r.from || "";   // D 상차지
+          ws.getCell(curRow, 5).value = r.to || "";     // E 하차지
+          ws.getCell(curRow, 6).value = r.work?.material || ""; // F 품명
+          const qty = Number(r.work?.qty) || 0;
+          if (!g.isM3 && qty) ws.getCell(curRow, 7).value = qty;       // G 수량
+          if (g.isM3 && qty) ws.getCell(curRow, 8).value = qty;        // H ㎥
+          curRow++;
         });
-        // 소계 행
-        const subStart = detailRow - gRows.length;
-        const subEnd = detailRow - 1;
-        const sr = detailRow;
-        ws["!merges"].push({ s: { r: sr - 1, c: 2 }, e: { r: sr - 1, c: 6 } });
-        C2(ws, `C${sr}`, "", SB(false, "left", 10, "F2F2F2"));
-        CF(ws, `H${sr}`, `SUM(H${subStart}:H${subEnd})`, SB(true, "right", 10, "F2F2F2"));
-        C2(ws, `I${sr}`, "", SB(false, "right", 10, "F2F2F2"));
-        C2(ws, `J${sr}`, "", SB(false, "right", 10, "F2F2F2"));
-        C2(ws, `K${sr}`, "", SB(false, "right", 10, "F2F2F2"));
-        C2(ws, `L${sr}`, "", SB(false, 10, "F2F2F2"));
-        detailRow++;
+
+        // 소계 행 (노란 배경)
+        ws.getRow(curRow).height = 17;
+        for (let c = 2; c <= 11; c++) {
+          const cell = ws.getCell(curRow, c);
+          cell.border = thinBorder;
+          cell.font = { name: "맑은 고딕", size: 10, bold: true };
+          cell.alignment = { vertical: "middle", horizontal: "center" };
+          cell.fill = yellowFill;
+        }
+        // 소계: 그룹 내 합산
+        const groupStartRow = curRow - g.items.length;
+        ws.getCell(curRow, 7).value = { formula: `SUM(G${groupStartRow}:G${curRow - 1})` };
+        ws.getCell(curRow, 8).value = { formula: `SUM(H${groupStartRow}:H${curRow - 1})` };
+        curRow++;
       });
 
-      ws["!ref"] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: detailRow, c: 11 } });
-      XLSX.utils.book_append_sheet(wb, ws, client.slice(0, 31));
+      // ═══════════════════════════════════════════════
+      // 인쇄 영역 설정
+      // ═══════════════════════════════════════════════
+      ws.pageSetup.printArea = `B1:K${curRow - 1}`;
+      ws.pageSetup.margins = {
+        left: 0.4, right: 0.4, top: 0.5, bottom: 0.5,
+        header: 0.3, footer: 0.3
+      };
     });
 
     const suffix = closingType === "mid" ? "25일마감" : "말일마감";
-    xlsxDl(wb, `청구서_${suffix}_${sD}_${eD}.xlsx`);
+    const buffer = await wb.xlsx.writeBuffer();
+    const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `청구서_${suffix}_${sD}_${eD}.xlsx`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 100);
   };
-
 
   // ── 기사별 정산서 xlsx — 5623/6821/6957 양식 그대로 ──────────
   const downloadByVehicle = () => {
