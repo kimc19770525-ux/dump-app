@@ -1684,31 +1684,23 @@ function AdminDash({ records, vehicles, setVehicles, mappings, setMappings, pric
     } : undefined
   });
 
-  // ── 업체별 청구서 xlsx — 4월은석.xlsx 양식 그대로 ──────────
+  // ── 업체별 청구서 xlsx — 템플릿 양식 그대로 ──────────────────
   const downloadByClient = (closingType) => {
     const XLSX = window.XLSX;
     if (!XLSX) { alert("잠시 후 다시 시도해주세요."); return; }
 
-    // 기간 계산
     const now = new Date();
     const y = now.getFullYear(), m = now.getMonth();
-    let sD, eD, sheetName;
+    let sD, eD;
     if (closingType === "mid") {
-      // 25일 마감: 전월26일 ~ 당월25일
-      sD = localDate(y, m - 1, 26);
-      eD = localDate(y, m, 25);
-      sheetName = "25일";
+      sD = localDate(y, m - 1, 26); eD = localDate(y, m, 25);
     } else {
-      // 말일 마감: 당월1일 ~ 당월말일
-      sD = localDate(y, m, 1);
-      eD = localDate(y, m + 1, 0);
-      sheetName = "말일";
+      sD = localDate(y, m, 1); eD = localDate(y, m + 1, 0);
     }
 
     const inR = r => r.date >= sD && r.date <= eD;
     const recs = records.filter(r => r.type === "report" && inR(r) && r.status !== "pending");
 
-    // 업체별 분류
     const byCl = {};
     recs.forEach(r => {
       const clients = getClients(r);
@@ -1721,244 +1713,182 @@ function AdminDash({ records, vehicles, setVehicles, mappings, setMappings, pric
 
     const wb = XLSX.utils.book_new();
 
-    // 양식 스타일 헬퍼 (맑은 고딕, thin 테두리)
+    // 스타일 헬퍼
     const thin = { style: "thin", color: { rgb: "000000" } };
-    const bdr = { top: thin, bottom: thin, left: thin, right: thin };
+    const bdr  = { top: thin, bottom: thin, left: thin, right: thin };
     const noBdr = {};
-    const S = (bold, align, sz, bg) => ({
-      font: { name: "맑은 고딕", bold: !!bold, sz: sz || 10 },
-      alignment: { horizontal: align || "left", vertical: "center", wrapText: false },
-      fill: bg ? { fgColor: { rgb: bg }, patternType: "solid" } : { patternType: "none" },
+    const font = (bold, sz) => ({ name: "돋움", bold: !!bold, sz: sz || 9 });
+    const al   = (h, v) => ({ horizontal: h || "left", vertical: v || "center" });
+    const S    = (bold, h, sz) => ({ font: font(bold, sz), alignment: al(h), fill: { patternType: "none" } });
+    const SB   = (bold, h, sz, bg) => ({
+      font: font(bold, sz),
+      alignment: al(h),
+      border: bdr,
+      fill: bg ? { fgColor: { rgb: bg }, patternType: "solid" } : { patternType: "none" }
     });
-    const SB = (bold, align, sz, bg) => ({ ...S(bold, align, sz, bg), border: bdr });
-
     const C2 = (ws, addr, val, style) => {
-      ws[addr] = { v: val, t: typeof val === "number" ? "n" : "s", s: style };
+      const t = (val instanceof Date) ? "d" : typeof val === "number" ? "n" : "s";
+      const z = (val instanceof Date) ? "yyyy-mm-dd" : undefined;
+      ws[addr] = { v: val, t, s: style };
+      if (z) ws[addr].z = z;
     };
-    const CF = (ws, addr, formula, style) => {
-      ws[addr] = { f: formula, t: "n", s: style };
-    };
-    const CD = (ws, addr, dateVal, style) => {
-      ws[addr] = { v: dateVal, t: "d", z: "yyyy-mm-dd", s: style };
+    const CF = (ws, addr, f, style) => { ws[addr] = { f, t: "n", s: style }; };
+    const merge = (ws, r1, c1, r2, c2) => ws["!merges"].push({ s:{r:r1,c:c1}, e:{r:r2,c:c2} });
+
+    // 날짜 파싱
+    const parseDate = (d) => {
+      if (!d) return null;
+      const [yy, mm, dd] = d.split("-").map(Number);
+      return new Date(yy, mm-1, dd);
     };
 
     clientList.forEach(([client, rows]) => {
       const ws = {};
       ws["!merges"] = [];
+      ws["!rows"] = [];
 
-      // 열너비: C~L 기준 (A,B 여백)
+      // 열너비 (A~L)
       ws["!cols"] = [
-        { wch: 4.875 }, // A
-        { wch: 5.125 }, // B
-        { wch: 6.0 },   // C
-        { wch: 6.0 },   // D
-        { wch: 12.125 },// E
-        { wch: 10.0 },  // F
-        { wch: 6.0 },   // G
-        { wch: 7.375 }, // H
-        { wch: 6.0 },   // I
-        { wch: 9.875 }, // J
-        { wch: 12.0 },  // K
-        { wch: 12.25 }, // L
+        {wch:4.875},{wch:5.125},{wch:6.0},{wch:6.0},{wch:12.125},
+        {wch:10.0},{wch:6.0},{wch:8.5},{wch:6.0},{wch:9.875},{wch:12.0},{wch:11.375}
       ];
 
-      // ── 행1: 거래명세서 제목
-      ws["!merges"].push({ s: { r: 0, c: 2 }, e: { r: 0, c: 11 } });
-      C2(ws, "C1", "거 래 명 세 서", S(true, "center", 16));
+      // 행높이
+      const rh = (r, h) => { if (!ws["!rows"][r]) ws["!rows"][r] = {}; ws["!rows"][r].hpt = h * 0.75; };
+      rh(0, 22.5); rh(1, 23.25); rh(2, 20.1); rh(3, 5.1); rh(4, 20.1);
+      rh(5, 5.1); rh(6, 20.1); rh(7, 20.1); rh(8, 20.1); rh(10, 25.5);
+      for (let i=11;i<=27;i++) rh(i, 18);
+      rh(28, 20.1); rh(29, 20.1); rh(30, 20.1); rh(31, 20.1); rh(32, 20.1);
+      rh(33, 20.1); rh(34, 20.1); rh(35, 20.1);
 
-      // ── 행3: 일자 / 공급자
-      ws["!merges"].push({ s: { r: 2, c: 2 }, e: { r: 2, c: 4 } });
-      ws["!merges"].push({ s: { r: 2, c: 4 }, e: { r: 2, c: 5 } });
-      ws["!merges"].push({ s: { r: 2, c: 8 }, e: { r: 2, c: 9 } });
-      ws["!merges"].push({ s: { r: 2, c: 10 }, e: { r: 2, c: 11 } });
-      C2(ws, "C3", "일        자:", S(false));
-      C2(ws, "E3", eD, S(false));
-      C2(ws, "I3", "공 급 자:", S(false));
-      C2(ws, "K3", "㈜ 다 솔 중 기", S(true));
+      // ─ 행1: 제목
+      merge(ws,0,2,0,11);
+      C2(ws,"C1","거 래 명 세 서", S(true,"center",14));
 
-      // ── 행5: 공급받는자
-      ws["!merges"].push({ s: { r: 4, c: 2 }, e: { r: 4, c: 4 } });
-      ws["!merges"].push({ s: { r: 4, c: 4 }, e: { r: 4, c: 7 } });
-      ws["!merges"].push({ s: { r: 4, c: 8 }, e: { r: 4, c: 10 } });
-      ws["!merges"].push({ s: { r: 4, c: 11 }, e: { r: 4, c: 11 } });
-      C2(ws, "C5", "공급받는자:", S(false));
-      C2(ws, "E5", client, S(true));
-      C2(ws, "I5", "759-88-00944", S(false));
-      C2(ws, "L5", "최 기 희", S(false));
+      // ─ 행3: 일자
+      merge(ws,2,2,2,3); merge(ws,2,4,2,5); merge(ws,2,8,2,9); merge(ws,2,10,2,11);
+      C2(ws,"C3","일        자:", S(false,"left"));
+      C2(ws,"E3", parseDate(eD), {...S(false,"left"), z:"yyyy-mm-dd"});
+      ws["E3"].z = "yyyy-mm-dd";
+      C2(ws,"I3","공 급 자:", S(false,"left"));
+      C2(ws,"K3","㈜ 다 솔 중 기", S(true,"left"));
 
-      // ── 행7: 금액
-      ws["!merges"].push({ s: { r: 6, c: 2 }, e: { r: 6, c: 4 } });
-      ws["!merges"].push({ s: { r: 6, c: 4 }, e: { r: 6, c: 5 } });
-      ws["!merges"].push({ s: { r: 6, c: 8 }, e: { r: 6, c: 11 } });
-      C2(ws, "C7", "금        액:", S(false));
-      CF(ws, "E7", "K45-K43", S(true));
-      C2(ws, "I7", "인천시 서구 청라에메랄드로 112 웰카운티 226동 1602호", S(false, "left", 9));
+      // ─ 행5: 공급받는자
+      merge(ws,4,2,4,3); merge(ws,4,4,4,7); merge(ws,4,8,4,10);
+      C2(ws,"C5","공급받는자:", S(false,"left"));
+      C2(ws,"E5", client, S(true,"left"));
+      C2(ws,"I5","759-88-00944", S(false,"left"));
+      C2(ws,"L5","최 기 희", S(false,"left"));
 
-      // ── 행8: 전화
-      ws["!merges"].push({ s: { r: 7, c: 8 }, e: { r: 7, c: 11 } });
-      C2(ws, "I8", "T:032-564-2306  F:032-566-2306", S(false, "left", 9));
+      // ─ 행7: 금액
+      merge(ws,6,2,6,3); merge(ws,6,4,6,5); merge(ws,6,8,6,11);
+      C2(ws,"C7","금        액:", S(false,"left"));
+      CF(ws,"E7","K33-K31", S(true,"left"));
+      C2(ws,"I7","인천시 서구 청라에메랄드로 112 웰카운티 226동 1602호", {...S(false,"left",8)});
 
-      // ── 행9: 청구내역 레이블
-      ws["!merges"].push({ s: { r: 8, c: 2 }, e: { r: 8, c: 11 } });
-      C2(ws, "C9", "청구내역:", S(true));
+      // ─ 행8: 전화
+      merge(ws,7,8,7,11);
+      C2(ws,"I8","T:032-564-2306  F:032-566-2306", S(false,"left",8));
 
-      // ── 행11: 헤더
-      ["월/일", "no.", "상차지", "하차지", "품명", "수량", "㎥", "단가", "금액", "비고"].forEach((h, i) => {
-        C2(ws, `${String.fromCharCode(67 + i)}11`, h, SB(true, "center", 10, "D9D9D9"));
+      // ─ 행9: 청구내역
+      merge(ws,8,2,8,11);
+      C2(ws,"C9","청구내역:", S(true,"left"));
+
+      // ─ 행11: 헤더 (회색 배경)
+      const hdrs = ["월/일","no.","상차지","하차지","품명","수량","㎥","단가","금액","비고"];
+      hdrs.forEach((h,i) => {
+        C2(ws, String.fromCharCode(67+i)+"11", h, SB(true,"center",9,"D9D9D9"));
       });
 
-      // ── 행12: 간격
-      // ── 행13~40: 요약 데이터 (상차지+하차지+품목 그룹)
-      const summaryMap = {};
-      rows.forEach(row => {
-        const key = `${row.from}||${row.to}||${row.work?.material}`;
-        if (!summaryMap[key]) summaryMap[key] = { from: row.from, to: row.to, mat: row.work?.material, qty: 0, qtyM3: 0 };
-        if (row.work?.unit === "㎥" || row.work?.unit === "m³") summaryMap[key].qtyM3 += Number(row.work?.qty) || 0;
-        else summaryMap[key].qty += Number(row.work?.qty) || 0;
-      });
+      // ─ 행12~28: 데이터 (날짜순 정렬)
+      const sorted = rows.slice().sort((a,b) => (a.date||"").localeCompare(b.date||""));
+      const DATA_START = 12;
+      const DATA_END = 28; // 17행까지 데이터
+      const emptyS = SB(false,"center");
 
-      let dataRow = 13;
-      Object.values(summaryMap).forEach(s => {
-        const r = dataRow;
-        C2(ws, `C${r}`, "", SB(false));
-        C2(ws, `D${r}`, "", SB(false));
-        C2(ws, `E${r}`, s.from || "", SB(false));
-        C2(ws, `F${r}`, s.to || "", SB(false));
-        C2(ws, `G${r}`, s.mat || "", SB(false));
-        if (s.qty) { ws[`H${r}`] = { v: s.qty, t: "n", s: SB(false, "right") }; }
-        else { C2(ws, `H${r}`, "", SB(false, "right")); }
-        if (s.qtyM3) { ws[`I${r}`] = { v: s.qtyM3, t: "n", s: SB(false, "right") }; }
-        else { C2(ws, `I${r}`, "", SB(false, "right")); }
-        C2(ws, `J${r}`, "", SB(false, "right"));
-        CF(ws, `K${r}`, `IF(H${r}<>"",J${r}*H${r},I${r}*J${r})`, SB(false, "right"));
-        C2(ws, `L${r}`, "", SB(false));
-        dataRow++;
-      });
-
-      // 빈행으로 40행까지 채우기
-      while (dataRow <= 40) {
-        const r = dataRow;
-        ["C","D","E","F","G","H","I","J","K","L"].forEach(col => C2(ws, `${col}${r}`, "", SB(false)));
-        dataRow++;
+      for (let ri=DATA_START; ri<=DATA_END; ri++) {
+        const dataIdx = ri - DATA_START;
+        const row = sorted[dataIdx];
+        const cols = ["C","D","E","F","G","H","I","J","K","L"];
+        cols.forEach(col => {
+          C2(ws, col+ri, "", emptyS);
+        });
+        if (row) {
+          const dayNum = row.date ? parseInt(row.date.split("-")[2]) : "";
+          const isM3 = row.work?.unit === "㎥" || row.work?.unit === "m³";
+          const qty = Number(row.work?.qty) || 0;
+          C2(ws,"C"+ri, dayNum||"", SB(false,"center"));
+          C2(ws,"D"+ri, dataIdx+1, SB(false,"center"));
+          C2(ws,"E"+ri, row.from||"", SB(false,"left"));
+          C2(ws,"F"+ri, row.to||"", SB(false,"left"));
+          C2(ws,"G"+ri, row.work?.material||"", SB(false,"left"));
+          if (!isM3 && qty) ws["H"+ri] = { v:qty, t:"n", s:SB(false,"center") };
+          else C2(ws,"H"+ri,"",SB(false,"center"));
+          if (isM3 && qty) ws["I"+ri] = { v:qty, t:"n", s:SB(false,"center") };
+          else C2(ws,"I"+ri,"",SB(false,"center"));
+          C2(ws,"J"+ri,"",SB(false,"right"));
+          CF(ws,"K"+ri, `H${ri}*J${ri}`, SB(false,"right"));
+          C2(ws,"L"+ri,"",SB(false,"left"));
+        }
       }
 
-      // ── 행41~42: 계
-      ws["!merges"].push({ s: { r: 40, c: 2 }, e: { r: 41, c: 6 } });
-      ws["!merges"].push({ s: { r: 40, c: 10 }, e: { r: 41, c: 11 } });
-      C2(ws, "C41", "  계", SB(true));
-      CF(ws, "H41", "SUM(H13:H40)", SB(true, "right"));
-      CF(ws, "I41", "SUBTOTAL(9,I13:I40)", SB(true, "right"));
-      C2(ws, "J41", "", SB(true, "right"));
-      CF(ws, "K41", "SUM(K13:K40)", SB(true, "right"));
+      // ─ 행29: 계
+      merge(ws,28,2,29,6); merge(ws,28,10,29,11);
+      C2(ws,"C29","  계", SB(true,"left"));
+      CF(ws,"H29",`SUBTOTAL(9,H${DATA_START}:H${DATA_END})`, SB(true,"center"));
+      CF(ws,"I29",`SUM(I${DATA_START}:I${DATA_END})`, SB(true,"center"));
+      C2(ws,"J29","",SB(true,"right"));
+      CF(ws,"K29",`SUM(K${DATA_START}:K${DATA_END})`, SB(true,"right"));
 
-      // ── 행43: 빈행 (K42 레퍼런스 맞추기)
-      ws["!merges"].push({ s: { r: 42, c: 2 }, e: { r: 42, c: 6 } });
-      ws["!merges"].push({ s: { r: 42, c: 7 }, e: { r: 42, c: 9 } });
-      ws["!merges"].push({ s: { r: 42, c: 10 }, e: { r: 42, c: 11 } });
-      C2(ws, "C43", "", SB(false));
-      C2(ws, "H43", "", SB(false));
-      C2(ws, "K43", "", SB(false));
+      // ─ 행30: 빈행
+      merge(ws,29,2,29,6); merge(ws,29,7,29,9); merge(ws,29,10,29,11);
+      ["C","D","E","F","G","H","I","J","K","L"].forEach(c => C2(ws,c+"30","",SB(false,"left")));
 
-      // ── 행44: 공급가/부가세
-      ws["!merges"].push({ s: { r: 43, c: 2 }, e: { r: 43, c: 6 } });
-      ws["!merges"].push({ s: { r: 43, c: 7 }, e: { r: 43, c: 9 } });
-      ws["!merges"].push({ s: { r: 43, c: 10 }, e: { r: 43, c: 11 } });
-      C2(ws, "C44", "공급가/부가세", SB(false));
-      CF(ws, "H44", "K41-K43", SB(false, "right"));
-      CF(ws, "K44", "H44*0.1", SB(false, "right"));
+      // ─ 행31: 빈행(K31 참조용)
+      merge(ws,30,2,30,6); merge(ws,30,7,30,9); merge(ws,30,10,30,11);
+      ["C","D","E","F","G","H","I","J","K","L"].forEach(c => C2(ws,c+"31","",SB(false,"left")));
 
-      // ── 행45: 총계
-      ws["!merges"].push({ s: { r: 44, c: 2 }, e: { r: 44, c: 6 } });
-      ws["!merges"].push({ s: { r: 44, c: 7 }, e: { r: 44, c: 9 } });
-      ws["!merges"].push({ s: { r: 44, c: 10 }, e: { r: 44, c: 11 } });
-      C2(ws, "C45", "총    계", SB(true));
-      CF(ws, "H45", "SUM(H41:H42)", SB(true, "right"));
-      CF(ws, "I45", "SUM(I41:I42)", SB(true, "right"));
-      CF(ws, "K45", "H44+K44", SB(true, "right"));
+      // ─ 행32: 공급가/부가세
+      merge(ws,31,2,31,6); merge(ws,31,7,31,9); merge(ws,31,10,31,11);
+      C2(ws,"C32","공급가/부가세", SB(false,"left"));
+      CF(ws,"H32","K29-K31", SB(false,"right"));
+      C2(ws,"I32","", SB(false,"right"));
+      C2(ws,"J32","", SB(false,"right"));
+      CF(ws,"K32","H32*0.1", SB(false,"right"));
 
-      // ── 행46~47: 담당자확인 / 계좌
-      ws["!merges"].push({ s: { r: 45, c: 2 }, e: { r: 46, c: 4 } });
-      ws["!merges"].push({ s: { r: 45, c: 5 }, e: { r: 45, c: 5 } });
-      ws["!merges"].push({ s: { r: 45, c: 6 }, e: { r: 46, c: 11 } });
-      C2(ws, "C46", "담당자확인", S(false));
-      C2(ws, "G46", "* 아래 계좌로 입금부탁드립니다 *", S(true, "center", 10, "FFFF00"));
+      // ─ 행33: 총계
+      merge(ws,32,2,32,6); merge(ws,32,7,32,9); merge(ws,32,10,32,11);
+      C2(ws,"C33","총    계", SB(true,"left"));
+      CF(ws,"H33","SUM(H29:H30)", SB(true,"right"));
+      C2(ws,"I33","", SB(true,"right"));
+      C2(ws,"J33","", SB(true,"right"));
+      CF(ws,"K33","H32+K32", SB(true,"right"));
 
-      // ── 행48: 계좌번호
-      ws["!merges"].push({ s: { r: 47, c: 2 }, e: { r: 47, c: 11 } });
-      C2(ws, "C48", "결재계좌번호: 955-024478-01-011  기업은행  ㈜ 다솔중기", S(true, "left", 11));
+      // ─ 행34~35: 담당자확인 / 계좌
+      merge(ws,33,2,34,4); merge(ws,33,6,34,11);
+      C2(ws,"C34","담당자확인", S(false,"center"));
+      C2(ws,"G34","* 아래 계좌로 입금부탁드립니다 *", {...S(true,"center"), fill:{fgColor:{rgb:"FFFF00"},patternType:"solid"}});
 
-      // ── 행50: 빈행
+      // ─ 행36: 계좌번호
+      merge(ws,35,2,35,11);
+      C2(ws,"C36","결재계좌번호: 955-024478-01-011  기업은행  ㈜ 다솔중기", S(true,"left",10));
 
-      // ── 행51: 업체명
-      ws["!merges"].push({ s: { r: 50, c: 2 }, e: { r: 50, c: 11 } });
-      CF(ws, "C51", "E5", S(true, "left", 12));
+      // ─ 행39: 업체명
+      merge(ws,38,2,38,11);
+      CF(ws,"C39","E5", S(true,"left",12));
 
-      // ── 행52: 청구리스트 타이틀
-      ws["!merges"].push({ s: { r: 51, c: 2 }, e: { r: 51, c: 11 } });
-      const monthLabel = `( ${eD.slice(0, 7).replace("-", "년 ")}월 청구 리스트)`;
-      C2(ws, "C52", monthLabel, S(false));
+      // ─ 행40: 청구리스트 타이틀
+      merge(ws,39,2,39,11);
+      const monthLabel = eD.slice(0,7).replace("-","년 ")+"월 청구 리스트";
+      C2(ws,"C40",`( ${monthLabel} )`, S(false,"left"));
 
-      // ── 행53: 상세 헤더 (파란 배경)
-      ["월/일", "no.", "상차지", "하차지", "품명", "수량", "㎥", "단가", "금액", "비고"].forEach((h, i) => {
-        C2(ws, `${String.fromCharCode(67 + i)}53`, h, SB(true, "center", 10, "4472C4"));
-      });
-
-      // ── 행54~: 상세 데이터 (날짜순)
-      let detailRow = 54;
-      const sortedRows = rows.slice().sort((a, b) => a.date.localeCompare(b.date));
-      
-      // 그룹별로 묶기 (상차지+하차지+품목)
-      const groupMap = {};
-      sortedRows.forEach(row => {
-        const key = `${row.from}||${row.to}||${row.work?.material}`;
-        if (!groupMap[key]) groupMap[key] = [];
-        groupMap[key].push(row);
-      });
-
-      const groupKeys = [...new Set(sortedRows.map(r => `${r.from}||${r.to}||${r.work?.material}`))];
-      groupKeys.forEach(key => {
-        const gRows = groupMap[key];
-        gRows.forEach(row => {
-          const day = row.date ? Number(row.date.slice(8)) : "";
-          const r = detailRow;
-          ws[`C${r}`] = { v: day, t: day ? "n" : "s", s: SB(false, "right") };
-          C2(ws, `D${r}`, row.vehicle || "", SB(false));
-          C2(ws, `E${r}`, row.from || "", SB(false));
-          C2(ws, `F${r}`, row.to || "", SB(false));
-          C2(ws, `G${r}`, row.work?.material || "", SB(false));
-          const qty = Number(row.work?.qty) || 0;
-          const isM3 = row.work?.unit === "㎥" || row.work?.unit === "m³";
-          if (!isM3 && qty) { ws[`H${r}`] = { v: qty, t: "n", s: SB(false, "right") }; }
-          else { C2(ws, `H${r}`, "", SB(false, "right")); }
-          if (isM3 && qty) { ws[`I${r}`] = { v: qty, t: "n", s: SB(false, "right") }; }
-          else { C2(ws, `I${r}`, "", SB(false, "right")); }
-          C2(ws, `J${r}`, "", SB(false, "right"));
-          C2(ws, `K${r}`, "", SB(false, "right"));
-          C2(ws, `L${r}`, "", SB(false));
-          detailRow++;
-        });
-        // 소계 행
-        const subStart = detailRow - gRows.length;
-        const subEnd = detailRow - 1;
-        const sr = detailRow;
-        ws["!merges"].push({ s: { r: sr - 1, c: 2 }, e: { r: sr - 1, c: 6 } });
-        C2(ws, `C${sr}`, "", SB(false, "left", 10, "F2F2F2"));
-        CF(ws, `H${sr}`, `SUM(H${subStart}:H${subEnd})`, SB(true, "right", 10, "F2F2F2"));
-        C2(ws, `I${sr}`, "", SB(false, "right", 10, "F2F2F2"));
-        C2(ws, `J${sr}`, "", SB(false, "right", 10, "F2F2F2"));
-        C2(ws, `K${sr}`, "", SB(false, "right", 10, "F2F2F2"));
-        C2(ws, `L${sr}`, "", SB(false, 10, "F2F2F2"));
-        detailRow++;
-      });
-
-      ws["!ref"] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: detailRow, c: 11 } });
-      XLSX.utils.book_append_sheet(wb, ws, client.slice(0, 31));
+      ws["!ref"] = XLSX.utils.encode_range({s:{r:0,c:0},e:{r:42,c:11}});
+      XLSX.utils.book_append_sheet(wb, ws, client.slice(0,31));
     });
 
     const suffix = closingType === "mid" ? "25일마감" : "말일마감";
     xlsxDl(wb, `청구서_${suffix}_${sD}_${eD}.xlsx`);
   };
-
 
   // ── 기사별 정산서 xlsx — 5623/6821/6957 양식 그대로 ──────────
   const downloadByVehicle = () => {
