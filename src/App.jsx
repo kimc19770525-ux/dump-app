@@ -1,4 +1,5 @@
 import React, { useState, useEffect, Component } from "react";
+import * as XLSX from "xlsx";
 
 export class ErrorBoundary extends Component {
   constructor(props) { super(props); this.state = { error: null }; }
@@ -1682,20 +1683,20 @@ function AdminDash({ records, vehicles, setVehicles, mappings, setMappings, pric
 
   // xlsx 헬퍼
   const xlsxDl = (wb, filename) => {
-    const XLSX = window.XLSX;
+    // XLSX imported
     try {
-      // Blob 방식 — 모바일 포함 모든 환경에서 동작
-      const wbout = XLSX.write(wb, { bookType: "xlsx", type: "array", cellStyles: true });
-      const blob = new Blob([wbout], { type: "application/octet-stream" });
-      const url = URL.createObjectURL(blob);
+      const wbout = XLSX.write(wb, { bookType: "xlsx", type: "base64", cellStyles: true });
+      // base64 data URI 방식 — 삼성 브라우저 포함 모바일 호환
+      const uri = "data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64," + wbout;
       const a = document.createElement("a");
-      a.href = url;
+      a.href = uri;
       a.download = filename;
+      a.style.display = "none";
       document.body.appendChild(a);
       a.click();
-      setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 1000);
+      setTimeout(() => document.body.removeChild(a), 500);
     } catch(e) {
-      alert("다운로드 실패: " + e);
+      alert("다운로드 실패: " + e.message);
     }
   };
 
@@ -1713,8 +1714,8 @@ function AdminDash({ records, vehicles, setVehicles, mappings, setMappings, pric
 
   // ── 업체별 청구서 xlsx — 다솔중기.xlsx 양식 그대로 ──────────
   const downloadByClient = (closingType) => {
-    const XLSX = window.XLSX;
-    if (!XLSX) { alert("잠시 후 다시 시도해주세요."); return; }
+    // XLSX imported
+    
 
     const now = new Date();
     const y = now.getFullYear(), m = now.getMonth();
@@ -1738,7 +1739,9 @@ function AdminDash({ records, vehicles, setVehicles, mappings, setMappings, pric
     const clientList = Object.entries(byCl).filter(([c]) => c !== "(미매핑)");
     if (clientList.length === 0) { alert("청구할 업체가 없습니다."); return; }
 
-    const wb = XLSX.utils.book_new();
+    let wb;
+    try {
+    wb = XLSX.utils.book_new();
 
     const thin = { style: "thin", color: { rgb: "000000" } };
     const bdr  = { top: thin, bottom: thin, left: thin, right: thin };
@@ -1935,12 +1938,13 @@ function AdminDash({ records, vehicles, setVehicles, mappings, setMappings, pric
 
     const suffix = closingType==="mid"?"25일마감":"말일마감";
     xlsxDl(wb, `청구서_${suffix}_${sD}_${eD}.xlsx`);
+    } catch(err) { alert("엑셀 생성 오류: " + err.message + "\n" + err.stack?.slice(0,200)); }
   };
 
   // ── 기사별 정산서 xlsx — 5623/6821/6957 양식 그대로 ──────────
   const downloadByVehicle = () => {
-    const XLSX = window.XLSX;
-    if (!XLSX) { alert("잠시 후 다시 시도해주세요."); return; }
+    // XLSX imported
+    
 
     // 가사정산: 항상 당월 1일 ~ 당월 말일
     const nowV = new Date();
@@ -2263,8 +2267,8 @@ function AdminDash({ records, vehicles, setVehicles, mappings, setMappings, pric
 
           <div style={{ display: "flex", gap: 8, marginBottom: 14, flexWrap: "wrap" }}>
             <Btn onClick={downloadAll} style={{ flex: 1 }} disabled={reportRecs.length === 0}>📥 전체CSV</Btn>
-            <Btn onClick={() => downloadByClient("mid")} color={C.blue} style={{ flex: 1 }} disabled={reportRecs.length === 0}>📤 청구(25일마감)</Btn>
-            <Btn onClick={() => downloadByClient("end")} color={C.blue} style={{ flex: 1 }} disabled={reportRecs.length === 0}>📤 청구(말일마감)</Btn>
+            <Btn onClick={() => downloadByClient("mid")} color={C.blue} style={{ flex: 1 }} disabled={reportRecs.length === 0}>📤 25일마감</Btn>
+            <Btn onClick={() => downloadByClient("end")} color={C.blue} style={{ flex: 1 }} disabled={reportRecs.length === 0}>📤 말일마감</Btn>
             <Btn onClick={downloadByVehicle} color={C.purple} style={{ flex: 1 }} disabled={reportRecs.length === 0}>🚛 기사별 정산</Btn>
           </div>
 
