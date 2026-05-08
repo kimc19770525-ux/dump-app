@@ -1420,7 +1420,21 @@ function PendingReports({ records, onRefresh }) {
                         style={{ flex:1, background:"#1a1d27", border:`1.5px solid ${C.green}`, borderRadius:8, padding:"6px 8px", color:C.text, fontSize:13, outline:"none" }}>
                         {["개","m³","톤"].map(u => <option key={u}>{u}</option>)}
                       </select>
-                      <button onClick={() => approve(r)} style={{
+                      <button onClick={async () => {
+                        const updated = {
+                          ...r,
+                          status: "approved",
+                          date: e.date,
+                          from: e.from,
+                          to: e.to,
+                          work: { ...r.work, material: e.material, qty: e.qty, unit: e.unit }
+                        };
+                        try {
+                          await window.sbRecords.upsert(updated);
+                          setApprovedIds(prev => new Set([...prev, r.id]));
+                          setEditMap(prev => { const n={...prev}; delete n[r.id]; return n; });
+                        } catch(err) { alert("저장 실패: " + err); }
+                      }} style={{
                         background:C.green, border:"none", borderRadius:8, padding:"6px 14px",
                         color:"#000", fontSize:12, fontWeight:700, cursor:"pointer", whiteSpace:"nowrap"
                       }}>✅ 저장·승인</button>
@@ -1684,7 +1698,7 @@ function AdminDash({ records, vehicles, setVehicles, mappings, setMappings, pric
     } : undefined
   });
 
-  // ── 업체별 청구서 xlsx — 템플릿 양식 그대로 ──────────────────
+  // ── 업체별 청구서 xlsx — 다솔중기.xlsx 양식 그대로 ──────────
   const downloadByClient = (closingType) => {
     const XLSX = window.XLSX;
     if (!XLSX) { alert("잠시 후 다시 시도해주세요."); return; }
@@ -1713,180 +1727,200 @@ function AdminDash({ records, vehicles, setVehicles, mappings, setMappings, pric
 
     const wb = XLSX.utils.book_new();
 
-    // 스타일 헬퍼
     const thin = { style: "thin", color: { rgb: "000000" } };
     const bdr  = { top: thin, bottom: thin, left: thin, right: thin };
-    const noBdr = {};
-    const font = (bold, sz) => ({ name: "돋움", bold: !!bold, sz: sz || 9 });
+    const fn   = (bold, sz) => ({ name: "맑은 고딕", bold: !!bold, sz: sz || 11 });
     const al   = (h, v) => ({ horizontal: h || "left", vertical: v || "center" });
-    const S    = (bold, h, sz) => ({ font: font(bold, sz), alignment: al(h), fill: { patternType: "none" } });
+    const nof  = { patternType: "none" };
+    const S    = (bold, h, sz) => ({ font: fn(bold, sz), alignment: al(h), fill: nof });
     const SB   = (bold, h, sz, bg) => ({
-      font: font(bold, sz),
-      alignment: al(h),
-      border: bdr,
-      fill: bg ? { fgColor: { rgb: bg }, patternType: "solid" } : { patternType: "none" }
+      font: fn(bold, sz), alignment: al(h), border: bdr,
+      fill: bg ? { fgColor: { rgb: bg }, patternType: "solid" } : nof
     });
     const C2 = (ws, addr, val, style) => {
-      const t = (val instanceof Date) ? "d" : typeof val === "number" ? "n" : "s";
-      const z = (val instanceof Date) ? "yyyy-mm-dd" : undefined;
+      const t = typeof val === "number" ? "n" : "s";
       ws[addr] = { v: val, t, s: style };
-      if (z) ws[addr].z = z;
+    };
+    const CD = (ws, addr, dateStr, style) => {
+      // Excel 날짜 시리얼 변환 (1900-01-01 = 1)
+      const d = new Date(dateStr + "T00:00:00");
+      const serial = Math.round((d - new Date(1899,11,30)) / 86400000);
+      ws[addr] = { v: serial, t: "n", z: "yyyy-mm-dd", s: style };
     };
     const CF = (ws, addr, f, style) => { ws[addr] = { f, t: "n", s: style }; };
-    const merge = (ws, r1, c1, r2, c2) => ws["!merges"].push({ s:{r:r1,c:c1}, e:{r:r2,c:c2} });
+    const mg  = (ws, r1, c1, r2, c2) => ws["!merges"].push({ s:{r:r1,c:c1}, e:{r:r2,c:c2} });
 
-    // 날짜 파싱
-    const parseDate = (d) => {
-      if (!d) return null;
-      const [yy, mm, dd] = d.split("-").map(Number);
-      return new Date(yy, mm-1, dd);
-    };
+    const DS = 12; // 데이터 시작행 (1-indexed)
+    const DE = 33; // 데이터 끝행
 
     clientList.forEach(([client, rows]) => {
       const ws = {};
       ws["!merges"] = [];
-      ws["!rows"] = [];
 
-      // 열너비 (A~L)
+      // 열너비
       ws["!cols"] = [
-        {wch:4.875},{wch:5.125},{wch:6.0},{wch:6.0},{wch:12.125},
-        {wch:10.0},{wch:6.0},{wch:8.5},{wch:6.0},{wch:9.875},{wch:12.0},{wch:11.375}
+        {wch:4.875},{wch:5.125},{wch:6},{wch:6},{wch:12.125},
+        {wch:10},{wch:6},{wch:8.5},{wch:6},{wch:9.875},{wch:12},{wch:11.375}
       ];
 
       // 행높이
-      const rh = (r, h) => { if (!ws["!rows"][r]) ws["!rows"][r] = {}; ws["!rows"][r].hpt = h * 0.75; };
-      rh(0, 22.5); rh(1, 23.25); rh(2, 20.1); rh(3, 5.1); rh(4, 20.1);
-      rh(5, 5.1); rh(6, 20.1); rh(7, 20.1); rh(8, 20.1); rh(10, 25.5);
-      for (let i=11;i<=27;i++) rh(i, 18);
-      rh(28, 20.1); rh(29, 20.1); rh(30, 20.1); rh(31, 20.1); rh(32, 20.1);
-      rh(33, 20.1); rh(34, 20.1); rh(35, 20.1);
+      ws["!rows"] = [];
+      const rh = (r,h) => { ws["!rows"][r] = { hpt: h*0.75 }; };
+      rh(0,22.5); rh(1,23.25); rh(2,20.1); rh(3,5.1); rh(4,20.1);
+      rh(5,5.1); rh(6,20.1); rh(7,20.1); rh(8,20.1); rh(10,20.1);
+      for(let i=11;i<=32;i++) rh(i,15);
+      rh(33,20.1); rh(34,20.1); rh(35,20.1); rh(36,20.1);
+      rh(37,20.1); rh(38,20.1); rh(39,20.1); rh(40,20.1);
+      rh(41,13.5); rh(42,22.5); rh(43,20.1); rh(44,20.1); rh(45,15);
 
       // ─ 행1: 제목
-      merge(ws,0,2,0,11);
-      C2(ws,"C1","거 래 명 세 서", S(true,"center",14));
+      mg(ws,0,2,0,11);
+      C2(ws,"C1","거 래 명 세 서",S(true,"center",14));
 
-      // ─ 행3: 일자
-      merge(ws,2,2,2,3); merge(ws,2,4,2,5); merge(ws,2,8,2,9); merge(ws,2,10,2,11);
-      C2(ws,"C3","일        자:", S(false,"left"));
-      C2(ws,"E3", parseDate(eD), {...S(false,"left"), z:"yyyy-mm-dd"});
-      ws["E3"].z = "yyyy-mm-dd";
-      C2(ws,"I3","공 급 자:", S(false,"left"));
-      C2(ws,"K3","㈜ 다 솔 중 기", S(true,"left"));
+      // ─ 행3
+      mg(ws,2,2,2,3); mg(ws,2,4,2,5); mg(ws,2,8,2,9); mg(ws,2,10,2,11);
+      C2(ws,"C3","일        자:",S(false));
+      CD(ws,"E3",eD,S(false));
+      C2(ws,"I3","공 급 자:",S(false));
+      C2(ws,"K3","㈜ 다 솔 중 기  ",S(true));
 
-      // ─ 행5: 공급받는자
-      merge(ws,4,2,4,3); merge(ws,4,4,4,7); merge(ws,4,8,4,10);
-      C2(ws,"C5","공급받는자:", S(false,"left"));
-      C2(ws,"E5", client, S(true,"left"));
-      C2(ws,"I5","759-88-00944", S(false,"left"));
-      C2(ws,"L5","최 기 희", S(false,"left"));
+      // ─ 행5
+      mg(ws,4,2,4,3); mg(ws,4,4,4,7); mg(ws,4,8,4,10);
+      C2(ws,"C5","공급받는자:",S(false));
+      C2(ws,"E5",client,S(true));
+      C2(ws,"I5","759-88-00944",S(false));
+      C2(ws,"L5","최 기 희",S(false));
 
-      // ─ 행7: 금액
-      merge(ws,6,2,6,3); merge(ws,6,4,6,5); merge(ws,6,8,6,11);
-      C2(ws,"C7","금        액:", S(false,"left"));
-      CF(ws,"E7","K33-K31", S(true,"left"));
-      C2(ws,"I7","인천시 서구 청라에메랄드로 112 웰카운티 226동 1602호", {...S(false,"left",8)});
+      // ─ 행7
+      mg(ws,6,2,6,3); mg(ws,6,4,6,5); mg(ws,6,8,6,11);
+      C2(ws,"C7","금        액:",S(false));
+      CF(ws,"E7","K38-K36",S(true));
+      C2(ws,"I7","인천시 서구 청라에메랄드로 112 웰카운티 226동 1602호",{...S(false,"left",9)});
 
-      // ─ 행8: 전화
-      merge(ws,7,8,7,11);
-      C2(ws,"I8","T:032-564-2306  F:032-566-2306", S(false,"left",8));
+      // ─ 행8
+      mg(ws,7,8,7,11);
+      C2(ws,"I8","T:032-564-2306  F:032-566-2306",{...S(false,"left",9)});
 
-      // ─ 행9: 청구내역
-      merge(ws,8,2,8,11);
-      C2(ws,"C9","청구내역:", S(true,"left"));
+      // ─ 행9
+      mg(ws,8,2,8,11);
+      C2(ws,"C9","청구내역:",S(true));
 
-      // ─ 행11: 헤더 (회색 배경)
+      // ─ 행11 헤더
       const hdrs = ["월/일","no.","상차지","하차지","품명","수량","㎥","단가","금액","비고"];
-      hdrs.forEach((h,i) => {
-        C2(ws, String.fromCharCode(67+i)+"11", h, SB(true,"center",9,"D9D9D9"));
+      hdrs.forEach((h,i) => C2(ws,String.fromCharCode(67+i)+"11",h,SB(true,"center",11,"D9D9D9")));
+
+      // ─ 행12~33 데이터 — 현장(상차지+하차지+품목)별 합계
+      const groupMap = {};
+      rows.forEach(row => {
+        const isM3 = row.work?.unit==="㎥"||row.work?.unit==="m³";
+        const key = `${row.from}||${row.to}||${row.work?.material}||${isM3?"m3":"ea"}`;
+        if(!groupMap[key]) groupMap[key] = { from:row.from, to:row.to, mat:row.work?.material, isM3, qty:0 };
+        groupMap[key].qty += Number(row.work?.qty)||0;
       });
+      const groups = Object.values(groupMap);
 
-      // ─ 행12~28: 데이터 (날짜순 정렬)
-      const sorted = rows.slice().sort((a,b) => (a.date||"").localeCompare(b.date||""));
-      const DATA_START = 12;
-      const DATA_END = 28; // 17행까지 데이터
-      const emptyS = SB(false,"center");
-
-      for (let ri=DATA_START; ri<=DATA_END; ri++) {
-        const dataIdx = ri - DATA_START;
-        const row = sorted[dataIdx];
-        const cols = ["C","D","E","F","G","H","I","J","K","L"];
-        cols.forEach(col => {
-          C2(ws, col+ri, "", emptyS);
+      for(let ri=DS; ri<=DE; ri++) {
+        const idx = ri - DS;
+        const g = groups[idx];
+        "CDEFGHIJKL".split("").forEach(c => {
+          ws[`${c}${ri}`] = { v:"", t:"s", s:SB(false,"left") };
         });
-        if (row) {
-          const dayNum = row.date ? parseInt(row.date.split("-")[2]) : "";
-          const isM3 = row.work?.unit === "㎥" || row.work?.unit === "m³";
-          const qty = Number(row.work?.qty) || 0;
-          C2(ws,"C"+ri, dayNum||"", SB(false,"center"));
-          C2(ws,"D"+ri, dataIdx+1, SB(false,"center"));
-          C2(ws,"E"+ri, row.from||"", SB(false,"left"));
-          C2(ws,"F"+ri, row.to||"", SB(false,"left"));
-          C2(ws,"G"+ri, row.work?.material||"", SB(false,"left"));
-          if (!isM3 && qty) ws["H"+ri] = { v:qty, t:"n", s:SB(false,"center") };
-          else C2(ws,"H"+ri,"",SB(false,"center"));
-          if (isM3 && qty) ws["I"+ri] = { v:qty, t:"n", s:SB(false,"center") };
-          else C2(ws,"I"+ri,"",SB(false,"center"));
-          C2(ws,"J"+ri,"",SB(false,"right"));
-          CF(ws,"K"+ri, `H${ri}*J${ri}`, SB(false,"right"));
-          C2(ws,"L"+ri,"",SB(false,"left"));
+        ws[`C${ri}`] = { v:"", t:"s", s:SB(false,"center") };
+        ws[`D${ri}`] = { v:"", t:"s", s:SB(false,"center") };
+        if(g) {
+          ws[`D${ri}`] = { v:idx+1, t:"n", s:SB(false,"center") };
+          ws[`E${ri}`] = { v:g.from||"", t:"s", s:SB(false,"left") };
+          ws[`F${ri}`] = { v:g.to||"", t:"s", s:SB(false,"left") };
+          ws[`G${ri}`] = { v:g.mat||"", t:"s", s:SB(false,"left") };
+          if(!g.isM3) ws[`H${ri}`] = { v:g.qty, t:"n", s:SB(false,"center") };
+          if(g.isM3)  ws[`I${ri}`] = { v:g.qty, t:"n", s:SB(false,"center") };
+          if(!g.isM3) ws[`K${ri}`] = { f:`H${ri}*J${ri}`, t:"n", s:SB(false,"right") };
+          else        ws[`K${ri}`] = { f:`I${ri}*J${ri}`, t:"n", s:SB(false,"right") };
         }
       }
 
-      // ─ 행29: 계
-      merge(ws,28,2,29,6); merge(ws,28,10,29,11);
-      C2(ws,"C29","  계", SB(true,"left"));
-      CF(ws,"H29",`SUBTOTAL(9,H${DATA_START}:H${DATA_END})`, SB(true,"center"));
-      CF(ws,"I29",`SUM(I${DATA_START}:I${DATA_END})`, SB(true,"center"));
-      C2(ws,"J29","",SB(true,"right"));
-      CF(ws,"K29",`SUM(K${DATA_START}:K${DATA_END})`, SB(true,"right"));
+      // ─ 행34~35: 계
+      mg(ws,33,2,34,6); mg(ws,33,10,33,11);
+      C2(ws,"C34","  계",SB(true,"left"));
+      CF(ws,"H34",`SUM(H${DS}:H${DE})`,SB(true,"center"));
+      CF(ws,"I34",`SUM(I${DS}:I${DE})`,SB(true,"center"));
+      C2(ws,"J34","",SB(true,"right"));
+      CF(ws,"K34",`SUM(K${DS}:K${DE})`,SB(true,"right"));
+      // 35행 빈행
+      "CDEFGHIJKL".split("").forEach(c => {
+        ws[`${c}35`] = { v:"", t:"s", s:SB(false,"left") };
+      });
 
-      // ─ 행30: 빈행
-      merge(ws,29,2,29,6); merge(ws,29,7,29,9); merge(ws,29,10,29,11);
-      ["C","D","E","F","G","H","I","J","K","L"].forEach(c => C2(ws,c+"30","",SB(false,"left")));
+      // ─ 행36: K36 참조용 빈행
+      mg(ws,35,2,35,6); mg(ws,35,7,35,9); mg(ws,35,10,35,11);
+      "CDEFGHIJKL".split("").forEach(c => {
+        ws[`${c}36`] = { v:"", t:"s", s:SB(false,"left") };
+      });
 
-      // ─ 행31: 빈행(K31 참조용)
-      merge(ws,30,2,30,6); merge(ws,30,7,30,9); merge(ws,30,10,30,11);
-      ["C","D","E","F","G","H","I","J","K","L"].forEach(c => C2(ws,c+"31","",SB(false,"left")));
+      // ─ 행37: 공급가/부가세
+      mg(ws,36,2,36,6); mg(ws,36,7,36,9); mg(ws,36,10,36,11);
+      C2(ws,"C37","공급가/부가세",SB(false,"left"));
+      CF(ws,"H37","K34-K36",SB(false,"right"));
+      C2(ws,"I37","",SB(false,"right"));
+      C2(ws,"J37","",SB(false,"right"));
+      CF(ws,"K37","H37*0.1",SB(false,"right"));
 
-      // ─ 행32: 공급가/부가세
-      merge(ws,31,2,31,6); merge(ws,31,7,31,9); merge(ws,31,10,31,11);
-      C2(ws,"C32","공급가/부가세", SB(false,"left"));
-      CF(ws,"H32","K29-K31", SB(false,"right"));
-      C2(ws,"I32","", SB(false,"right"));
-      C2(ws,"J32","", SB(false,"right"));
-      CF(ws,"K32","H32*0.1", SB(false,"right"));
+      // ─ 행38: 총계
+      mg(ws,37,2,37,6); mg(ws,37,7,37,9); mg(ws,37,10,37,11);
+      C2(ws,"C38","총    계",SB(true,"left"));
+      CF(ws,"H38","SUM(H34:H35)",SB(true,"right"));
+      CF(ws,"I38","SUM(I34:I35)",SB(true,"right"));
+      C2(ws,"J38","",SB(true,"right"));
+      CF(ws,"K38","H37+K37",SB(true,"right"));
 
-      // ─ 행33: 총계
-      merge(ws,32,2,32,6); merge(ws,32,7,32,9); merge(ws,32,10,32,11);
-      C2(ws,"C33","총    계", SB(true,"left"));
-      CF(ws,"H33","SUM(H29:H30)", SB(true,"right"));
-      C2(ws,"I33","", SB(true,"right"));
-      C2(ws,"J33","", SB(true,"right"));
-      CF(ws,"K33","H32+K32", SB(true,"right"));
+      // ─ 행39~40: 담당자확인
+      mg(ws,38,2,39,4); mg(ws,38,5,39,5); mg(ws,38,6,39,11);
+      C2(ws,"C39","담당자확인",S(false,"center"));
+      C2(ws,"G39","* 아래 계좌로 입금부탁드립니다 *",{...S(true,"center"),fill:{fgColor:{rgb:"FFFF00"},patternType:"solid"}});
 
-      // ─ 행34~35: 담당자확인 / 계좌
-      merge(ws,33,2,34,4); merge(ws,33,6,34,11);
-      C2(ws,"C34","담당자확인", S(false,"center"));
-      C2(ws,"G34","* 아래 계좌로 입금부탁드립니다 *", {...S(true,"center"), fill:{fgColor:{rgb:"FFFF00"},patternType:"solid"}});
+      // ─ 행41: 계좌
+      mg(ws,40,2,40,11);
+      C2(ws,"C41","결재계좌번호: 955-024478-01-011 기업은행 ㈜ 다솔중기",S(true,"left",10));
 
-      // ─ 행36: 계좌번호
-      merge(ws,35,2,35,11);
-      C2(ws,"C36","결재계좌번호: 955-024478-01-011  기업은행  ㈜ 다솔중기", S(true,"left",10));
+      // ─ 행44: 업체명
+      mg(ws,43,2,43,11);
+      CF(ws,"C44","E5",S(true,"left",12));
 
-      // ─ 행39: 업체명
-      merge(ws,38,2,38,11);
-      CF(ws,"C39","E5", S(true,"left",12));
+      // ─ 행45: 청구리스트 타이틀
+      mg(ws,44,2,44,11);
+      const mo = eD.slice(5,7).replace(/^0/,"");
+      C2(ws,"C45",`( ${mo}월 청구 리스트)`,S(false,"left"));
 
-      // ─ 행40: 청구리스트 타이틀
-      merge(ws,39,2,39,11);
-      const monthLabel = eD.slice(0,7).replace("-","년 ")+"월 청구 리스트";
-      C2(ws,"C40",`( ${monthLabel} )`, S(false,"left"));
+      // ─ 행46: 상세 헤더
+      hdrs.forEach((h,i) => C2(ws,String.fromCharCode(67+i)+"46",h,SB(true,"center",11,"4472C4")));
 
-      ws["!ref"] = XLSX.utils.encode_range({s:{r:0,c:0},e:{r:42,c:11}});
+      // ─ 행47~: 상세 데이터 (날짜+차량번호)
+      let detailRow = 47;
+      sorted.forEach((row,i) => {
+        const day = row.date ? parseInt(row.date.split("-")[2]) : "";
+        const isM3 = row.work?.unit==="㎥"||row.work?.unit==="m³";
+        const qty = Number(row.work?.qty)||0;
+        const r = detailRow;
+        ws[`C${r}`] = { v:day||"", t:day?"n":"s", s:SB(false,"center") };
+        ws[`D${r}`] = { v:row.vehicle||"", t:"s", s:SB(false,"center") };
+        ws[`E${r}`] = { v:row.from||"", t:"s", s:SB(false,"left") };
+        ws[`F${r}`] = { v:row.to||"", t:"s", s:SB(false,"left") };
+        ws[`G${r}`] = { v:row.work?.material||"", t:"s", s:SB(false,"left") };
+        if(!isM3&&qty) ws[`H${r}`] = { v:qty, t:"n", s:SB(false,"center") };
+        else ws[`H${r}`] = { v:"", t:"s", s:SB(false,"center") };
+        if(isM3&&qty) ws[`I${r}`] = { v:qty, t:"n", s:SB(false,"center") };
+        else ws[`I${r}`] = { v:"", t:"s", s:SB(false,"center") };
+        ws[`J${r}`] = { v:"", t:"s", s:SB(false,"right") };
+        ws[`K${r}`] = { v:"", t:"s", s:SB(false,"right") };
+        ws[`L${r}`] = { v:"", t:"s", s:SB(false,"left") };
+        detailRow++;
+      });
+
+      ws["!ref"] = XLSX.utils.encode_range({s:{r:0,c:0},e:{r:detailRow,c:11}});
       XLSX.utils.book_append_sheet(wb, ws, client.slice(0,31));
     });
 
-    const suffix = closingType === "mid" ? "25일마감" : "말일마감";
+    const suffix = closingType==="mid"?"25일마감":"말일마감";
     xlsxDl(wb, `청구서_${suffix}_${sD}_${eD}.xlsx`);
   };
 
