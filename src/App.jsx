@@ -1683,7 +1683,20 @@ function AdminDash({ records, vehicles, setVehicles, mappings, setMappings, pric
   // xlsx 헬퍼
   const xlsxDl = (wb, filename) => {
     const XLSX = window.XLSX;
-    XLSX.writeFile(wb, filename);
+    try {
+      // Blob 방식 — 모바일 포함 모든 환경에서 동작
+      const wbout = XLSX.write(wb, { bookType: "xlsx", type: "array", cellStyles: true });
+      const blob = new Blob([wbout], { type: "application/octet-stream" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 1000);
+    } catch(e) {
+      alert("다운로드 실패: " + e);
+    }
   };
 
   const cellStyle = (bold, align, color, bgColor, border) => ({
