@@ -1911,6 +1911,7 @@ function AdminDash({ records, vehicles, setVehicles, mappings, setMappings, pric
       hdrs.forEach((h,i) => C2(ws,String.fromCharCode(67+i)+"46",h,SB(true,"center",11,"4472C4")));
 
       // ─ 행47~: 상세 데이터 (날짜+차량번호)
+      const sorted = rows.slice().sort((a,b)=>(a.date||"").localeCompare(b.date||""));
       let detailRow = 47;
       sorted.forEach((row,i) => {
         const day = row.date ? parseInt(row.date.split("-")[2]) : "";
