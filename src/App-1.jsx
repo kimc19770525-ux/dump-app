@@ -1420,7 +1420,21 @@ function PendingReports({ records, onRefresh }) {
                         style={{ flex:1, background:"#1a1d27", border:`1.5px solid ${C.green}`, borderRadius:8, padding:"6px 8px", color:C.text, fontSize:13, outline:"none" }}>
                         {["개","m³","톤"].map(u => <option key={u}>{u}</option>)}
                       </select>
-                      <button onClick={() => approve(r)} style={{
+                      <button onClick={async () => {
+                        const updated = {
+                          ...r,
+                          status: "approved",
+                          date: e.date,
+                          from: e.from,
+                          to: e.to,
+                          work: { ...r.work, material: e.material, qty: e.qty, unit: e.unit }
+                        };
+                        try {
+                          await window.sbRecords.upsert(updated);
+                          setApprovedIds(prev => new Set([...prev, r.id]));
+                          setEditMap(prev => { const n={...prev}; delete n[r.id]; return n; });
+                        } catch(err) { alert("저장 실패: " + err); }
+                      }} style={{
                         background:C.green, border:"none", borderRadius:8, padding:"6px 14px",
                         color:"#000", fontSize:12, fontWeight:700, cursor:"pointer", whiteSpace:"nowrap"
                       }}>✅ 저장·승인</button>
@@ -1669,7 +1683,20 @@ function AdminDash({ records, vehicles, setVehicles, mappings, setMappings, pric
   // xlsx 헬퍼
   const xlsxDl = (wb, filename) => {
     const XLSX = window.XLSX;
-    XLSX.writeFile(wb, filename);
+    try {
+      const wbout = XLSX.write(wb, { bookType: "xlsx", type: "base64", cellStyles: true });
+      // base64 data URI 방식 — 삼성 브라우저 포함 모바일 호환
+      const uri = "data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64," + wbout;
+      const a = document.createElement("a");
+      a.href = uri;
+      a.download = filename;
+      a.style.display = "none";
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(() => document.body.removeChild(a), 500);
+    } catch(e) {
+      alert("다운로드 실패: " + e.message);
+    }
   };
 
   const cellStyle = (bold, align, color, bgColor, border) => ({
@@ -1684,10 +1711,10 @@ function AdminDash({ records, vehicles, setVehicles, mappings, setMappings, pric
     } : undefined
   });
 
-  // ── 업체별 청구서 xlsx — ExcelJS, 3번 사진 양식 (갑지+을지) ──────
-  const downloadByClient = async (closingType) => {
-    const ExcelJS = window.ExcelJS;
-    if (!ExcelJS) { alert("ExcelJS 라이브러리가 로드되지 않았습니다. 페이지를 새로고침해주세요."); return; }
+  // ── 업체별 청구서 xlsx — 다솔중기.xlsx 양식 그대로 ──────────
+  const downloadByClient = (closingType) => {
+    const XLSX = window.XLSX;
+    if (!XLSX) { alert("잠시 후 다시 시도해주세요."); return; }
 
     const now = new Date();
     const y = now.getFullYear(), m = now.getMonth();
@@ -1711,477 +1738,203 @@ function AdminDash({ records, vehicles, setVehicles, mappings, setMappings, pric
     const clientList = Object.entries(byCl).filter(([c]) => c !== "(미매핑)");
     if (clientList.length === 0) { alert("청구할 업체가 없습니다."); return; }
 
-    const wb = new ExcelJS.Workbook();
-    wb.creator = "다솔중기";
-    wb.created = new Date();
+    const wb = XLSX.utils.book_new();
 
-    // 스타일 헬퍼
-    const thinBorder = {
-      top:    { style: "thin", color: { argb: "FF000000" } },
-      bottom: { style: "thin", color: { argb: "FF000000" } },
-      left:   { style: "thin", color: { argb: "FF000000" } },
-      right:  { style: "thin", color: { argb: "FF000000" } }
+    const thin = { style: "thin", color: { rgb: "000000" } };
+    const bdr  = { top: thin, bottom: thin, left: thin, right: thin };
+    const fn   = (bold, sz) => ({ name: "맑은 고딕", bold: !!bold, sz: sz || 11 });
+    const al   = (h, v) => ({ horizontal: h || "left", vertical: v || "center" });
+    const nof  = { patternType: "none" };
+    const S    = (bold, h, sz) => ({ font: fn(bold, sz), alignment: al(h), fill: nof });
+    const SB   = (bold, h, sz, bg) => ({
+      font: fn(bold, sz), alignment: al(h), border: bdr,
+      fill: bg ? { fgColor: { rgb: bg }, patternType: "solid" } : nof
+    });
+    const C2 = (ws, addr, val, style) => {
+      const t = typeof val === "number" ? "n" : "s";
+      ws[addr] = { v: val, t, s: style };
     };
-    const yellowFill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFFFF00" } };
+    const CD = (ws, addr, dateStr, style) => {
+      // Excel 날짜 시리얼 변환 (1900-01-01 = 1)
+      const d = new Date(dateStr + "T00:00:00");
+      const serial = Math.round((d - new Date(1899,11,30)) / 86400000);
+      ws[addr] = { v: serial, t: "n", z: "yyyy-mm-dd", s: style };
+    };
+    const CF = (ws, addr, f, style) => { ws[addr] = { f, t: "n", s: style }; };
+    const mg  = (ws, r1, c1, r2, c2) => ws["!merges"].push({ s:{r:r1,c:c1}, e:{r:r2,c:c2} });
 
-    // 월/일 → "M-D" 포맷
-    const fmtMD = (dateStr) => {
-      if (!dateStr) return "";
-      const parts = dateStr.split("-");
-      return `${parseInt(parts[1])}-${parseInt(parts[2])}`;
-    };
+    const DS = 12; // 데이터 시작행 (1-indexed)
+    const DE = 33; // 데이터 끝행
 
     clientList.forEach(([client, rows]) => {
-      const ws = wb.addWorksheet(client.slice(0, 31), {
-        pageSetup: { paperSize: 9, orientation: "portrait", fitToPage: true, fitToWidth: 1, fitToHeight: 0 }
-      });
+      const ws = {};
+      ws["!merges"] = [];
 
-      // 열너비 (B~M, 12개 열)
-      ws.columns = [
-        { width: 2.5 },   // A
-        { width: 5 },     // B 월/일
-        { width: 6 },     // C no.
-        { width: 12 },    // D 상차지
-        { width: 12 },    // E 하차지
-        { width: 7 },     // F 품명
-        { width: 7 },     // G 수량
-        { width: 7 },     // H ㎥
-        { width: 11 },    // I 단가
-        { width: 13 },    // J 금액
-        { width: 11 },    // K 비고
-        { width: 2.5 }    // L 우측 여백
+      // 열너비
+      ws["!cols"] = [
+        {wch:4.875},{wch:5.125},{wch:6},{wch:6},{wch:12.125},
+        {wch:10},{wch:6},{wch:8.5},{wch:6},{wch:9.875},{wch:12},{wch:11.375}
       ];
 
-      // ═══════════════════════════════════════════════
-      // 갑지 (1~37행)
-      // ═══════════════════════════════════════════════
+      // 행높이
+      ws["!rows"] = [];
+      const rh = (r,h) => { ws["!rows"][r] = { hpt: h*0.75 }; };
+      rh(0,22.5); rh(1,23.25); rh(2,20.1); rh(3,5.1); rh(4,20.1);
+      rh(5,5.1); rh(6,20.1); rh(7,20.1); rh(8,20.1); rh(10,20.1);
+      for(let i=11;i<=32;i++) rh(i,15);
+      rh(33,20.1); rh(34,20.1); rh(35,20.1); rh(36,20.1);
+      rh(37,20.1); rh(38,20.1); rh(39,20.1); rh(40,20.1);
+      rh(41,13.5); rh(42,22.5); rh(43,20.1); rh(44,20.1); rh(45,15);
 
-      // 행1: 제목 "거 래 명 세 서"
-      ws.mergeCells("B1:K1");
-      const titleCell = ws.getCell("B1");
-      titleCell.value = "거 래 명 세 서";
-      titleCell.font = { name: "맑은 고딕", size: 16, bold: true };
-      titleCell.alignment = { horizontal: "center", vertical: "middle" };
-      titleCell.border = {
-        top: { style: "medium", color: { argb: "FF2E7D32" } },
-        left: { style: "medium", color: { argb: "FF2E7D32" } },
-        right: { style: "medium", color: { argb: "FF2E7D32" } },
-        bottom: { style: "thin", color: { argb: "FF000000" } }
-      };
-      ws.getRow(1).height = 30;
-      ws.getRow(2).height = 8;
+      // ─ 행1: 제목
+      mg(ws,0,2,0,11);
+      C2(ws,"C1","거 래 명 세 서",S(true,"center",14));
 
-      // 행3: 일자 / 공급자 박스
-      ws.mergeCells("B3:C3");
-      ws.getCell("B3").value = "일        자:";
-      ws.getCell("B3").font = { name: "맑은 고딕", size: 10, underline: true };
-      ws.getCell("B3").alignment = { horizontal: "left", vertical: "middle" };
+      // ─ 행3
+      mg(ws,2,2,2,3); mg(ws,2,4,2,5); mg(ws,2,8,2,9); mg(ws,2,10,2,11);
+      C2(ws,"C3","일        자:",S(false));
+      CD(ws,"E3",eD,S(false));
+      C2(ws,"I3","공 급 자:",S(false));
+      C2(ws,"K3","㈜ 다 솔 중 기  ",S(true));
 
-      ws.mergeCells("D3:F3");
-      const dateCell = ws.getCell("D3");
-      const [yy, mm, dd] = eD.split("-").map(Number);
-      dateCell.value = `${yy}년 ${mm}월 ${dd}일`;
-      dateCell.font = { name: "맑은 고딕", size: 10 };
-      dateCell.alignment = { horizontal: "left", vertical: "middle" };
+      // ─ 행5
+      mg(ws,4,2,4,3); mg(ws,4,4,4,7); mg(ws,4,8,4,10);
+      C2(ws,"C5","공급받는자:",S(false));
+      C2(ws,"E5",client,S(true));
+      C2(ws,"I5","759-88-00944",S(false));
+      C2(ws,"L5","최 기 희",S(false));
 
-      // 공급자 박스 (G3:K8)
-      ws.mergeCells("G3:H3");
-      ws.getCell("G3").value = "공 급 자:";
-      ws.getCell("G3").font = { name: "맑은 고딕", size: 10, bold: true };
-      ws.getCell("G3").alignment = { horizontal: "center", vertical: "middle" };
+      // ─ 행7
+      mg(ws,6,2,6,3); mg(ws,6,4,6,5); mg(ws,6,8,6,11);
+      C2(ws,"C7","금        액:",S(false));
+      CF(ws,"E7","K38-K36",S(true));
+      C2(ws,"I7","인천시 서구 청라에메랄드로 112 웰카운티 226동 1602호",{...S(false,"left",9)});
 
-      ws.mergeCells("I3:K3");
-      ws.getCell("I3").value = "㈜ 다 솔 중 기";
-      ws.getCell("I3").font = { name: "맑은 고딕", size: 10, bold: true };
-      ws.getCell("I3").alignment = { horizontal: "center", vertical: "middle" };
+      // ─ 행8
+      mg(ws,7,8,7,11);
+      C2(ws,"I8","T:032-564-2306  F:032-566-2306",{...S(false,"left",9)});
 
-      ws.mergeCells("G5:H5");
-      ws.getCell("G5").value = "759-88-00944";
-      ws.getCell("G5").font = { name: "맑은 고딕", size: 10 };
-      ws.getCell("G5").alignment = { horizontal: "center", vertical: "middle" };
-      ws.mergeCells("I5:K5");
-      ws.getCell("I5").value = "최 기 희";
-      ws.getCell("I5").font = { name: "맑은 고딕", size: 10 };
-      ws.getCell("I5").alignment = { horizontal: "center", vertical: "middle" };
+      // ─ 행9
+      mg(ws,8,2,8,11);
+      C2(ws,"C9","청구내역:",S(true));
 
-      ws.mergeCells("G7:K7");
-      ws.getCell("G7").value = "인천시 서구 청라임로 109 호반1차 259동 1103호";
-      ws.getCell("G7").font = { name: "맑은 고딕", size: 9 };
-      ws.getCell("G7").alignment = { horizontal: "center", vertical: "middle" };
-      ws.mergeCells("G8:K8");
-      ws.getCell("G8").value = "T:032-564-2306  F:032-566-2306";
-      ws.getCell("G8").font = { name: "맑은 고딕", size: 9 };
-      ws.getCell("G8").alignment = { horizontal: "center", vertical: "middle" };
+      // ─ 행11 헤더
+      const hdrs = ["월/일","no.","상차지","하차지","품명","수량","㎥","단가","금액","비고"];
+      hdrs.forEach((h,i) => C2(ws,String.fromCharCode(67+i)+"11",h,SB(true,"center",11,"D9D9D9")));
 
-      // 공급자 박스 테두리
-      for (let r = 3; r <= 8; r++) {
-        for (let c = 7; c <= 11; c++) {
-          const cell = ws.getCell(r, c);
-          cell.border = {
-            top:    r === 3 ? { style: "medium", color: { argb: "FF000000" } } : (cell.border?.top || undefined),
-            bottom: r === 8 ? { style: "medium", color: { argb: "FF000000" } } : (cell.border?.bottom || undefined),
-            left:   c === 7 ? { style: "medium", color: { argb: "FF000000" } } : (cell.border?.left || undefined),
-            right:  c === 11 ? { style: "medium", color: { argb: "FF000000" } } : (cell.border?.right || undefined)
-          };
-        }
-      }
-
-      // 행5: 공급받는자
-      ws.mergeCells("B5:C5");
-      ws.getCell("B5").value = "공급받는자:";
-      ws.getCell("B5").font = { name: "맑은 고딕", size: 10, underline: true };
-      ws.getCell("B5").alignment = { horizontal: "left", vertical: "middle" };
-
-      ws.mergeCells("D5:F5");
-      ws.getCell("D5").value = client;
-      ws.getCell("D5").font = { name: "맑은 고딕", size: 10, bold: true };
-      ws.getCell("D5").alignment = { horizontal: "left", vertical: "middle" };
-
-      // 행7: 금액
-      ws.mergeCells("B7:C7");
-      ws.getCell("B7").value = "금        액:";
-      ws.getCell("B7").font = { name: "맑은 고딕", size: 10, underline: true };
-      ws.getCell("B7").alignment = { horizontal: "left", vertical: "middle" };
-
-      ws.mergeCells("D7:F7");
-      const moneyCell = ws.getCell("D7");
-      moneyCell.value = { formula: `J33`, result: 0 };
-      moneyCell.numFmt = '"₩"#,##0';
-      moneyCell.font = { name: "맑은 고딕", size: 11, bold: true };
-      moneyCell.alignment = { horizontal: "left", vertical: "middle" };
-
-      // 행9: 청구내역
-      ws.getCell("B9").value = "청구내역:";
-      ws.getCell("B9").font = { name: "맑은 고딕", size: 10, bold: true };
-      ws.getCell("B9").alignment = { horizontal: "left", vertical: "middle" };
-
-      // 행10 빈줄
-      ws.getRow(10).height = 5;
-
-      // ─────────────────────────────────────────────
-      // 갑지 데이터 그룹핑: 상차지+하차지+품명 키
-      // ─────────────────────────────────────────────
-      const groupMap = new Map();
-      rows.forEach(r => {
-        const from = r.from || "";
-        const to = r.to || "";
-        const mat = r.work?.material || "";
-        const unit = r.work?.unit || "";
-        const isM3 = unit === "㎥" || unit === "m³";
-        const qty = Number(r.work?.qty) || 0;
-        const price = getPrice(from, to, mat) || 0;
-        const key = `${from}||${to}||${mat}`;
-        const dayNum = r.date ? parseInt(r.date.split("-")[2]) : null;
-
-        if (!groupMap.has(key)) {
-          groupMap.set(key, {
-            from, to, mat, isM3, price,
-            qtySum: 0, m3Sum: 0,
-            firstDay: dayNum
-          });
-        }
-        const g = groupMap.get(key);
-        if (isM3) g.m3Sum += qty;
-        else g.qtySum += qty;
-        if (dayNum !== null && (g.firstDay === null || dayNum < g.firstDay)) g.firstDay = dayNum;
+      // ─ 행12~33 데이터 — 현장(상차지+하차지+품목)별 합계
+      const groupMap = {};
+      rows.forEach(row => {
+        const isM3 = row.work?.unit==="㎥"||row.work?.unit==="m³";
+        const key = `${row.from}||${row.to}||${row.work?.material}||${isM3?"m3":"ea"}`;
+        if(!groupMap[key]) groupMap[key] = { from:row.from, to:row.to, mat:row.work?.material, isM3, qty:0 };
+        groupMap[key].qty += Number(row.work?.qty)||0;
       });
-      const groups = Array.from(groupMap.values()).sort((a, b) => {
-        if (a.firstDay !== b.firstDay) return (a.firstDay || 0) - (b.firstDay || 0);
-        return a.from.localeCompare(b.from);
-      });
+      const groups = Object.values(groupMap);
 
-      // 행11: 헤더
-      const headerRow = 11;
-      const headers = ["월/일", "no.", "상차지", "하차지", "품명", "수량", "㎥", "단가", "금액", "비고"];
-      headers.forEach((h, i) => {
-        const cell = ws.getCell(headerRow, 2 + i);
-        cell.value = h;
-        cell.font = { name: "맑은 고딕", size: 10, bold: true };
-        cell.alignment = { horizontal: "center", vertical: "middle" };
-        cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFE7E6E6" } };
-        cell.border = thinBorder;
-      });
-      ws.getRow(headerRow).height = 22;
-
-      // 행12~28 (총 17행) 데이터 영역
-      const DATA_START = 12;
-      const DATA_END = 28;
-      const DATA_ROWS = DATA_END - DATA_START + 1;
-
-      for (let i = 0; i < DATA_ROWS; i++) {
-        const r = DATA_START + i;
-        const g = groups[i];
-        ws.getRow(r).height = 18;
-
-        for (let c = 2; c <= 11; c++) {
-          ws.getCell(r, c).border = thinBorder;
-          ws.getCell(r, c).font = { name: "맑은 고딕", size: 10 };
-          ws.getCell(r, c).alignment = { vertical: "middle", horizontal: "center" };
-        }
-
-        if (g) {
-          // B 월/일: 비워둠 (3번 사진은 갑지 월/일 빈칸)
-          // C no.: 비워둠
-          ws.getCell(r, 4).value = g.from;       // D 상차지
-          ws.getCell(r, 4).alignment = { horizontal: "center", vertical: "middle" };
-          ws.getCell(r, 5).value = g.to;         // E 하차지
-          ws.getCell(r, 5).alignment = { horizontal: "center", vertical: "middle" };
-          ws.getCell(r, 6).value = g.mat;        // F 품명
-          if (!g.isM3 && g.qtySum) {
-            ws.getCell(r, 7).value = g.qtySum;   // G 수량
-          }
-          if (g.isM3 && g.m3Sum) {
-            ws.getCell(r, 8).value = g.m3Sum;    // H ㎥
-          }
-          if (g.price) {
-            ws.getCell(r, 9).value = g.price;    // I 단가
-            ws.getCell(r, 9).numFmt = "#,##0";
-            ws.getCell(r, 9).alignment = { horizontal: "right", vertical: "middle" };
-          }
-          // J 금액 = 수량(G or H) * 단가(I)
-          ws.getCell(r, 10).value = { formula: `IF(G${r}="",H${r},G${r})*I${r}` };
-          ws.getCell(r, 10).numFmt = "#,##0";
-          ws.getCell(r, 10).alignment = { horizontal: "right", vertical: "middle" };
-        } else {
-          // 빈 행도 금액에 0 표시 (3번 사진처럼)
-          ws.getCell(r, 10).value = 0;
-          ws.getCell(r, 10).numFmt = "#,##0";
-          ws.getCell(r, 10).alignment = { horizontal: "right", vertical: "middle" };
-        }
-      }
-
-      // 행29: 계
-      ws.mergeCells(`B29:F29`);
-      ws.getCell("B29").value = "계";
-      ws.getCell("B29").font = { name: "맑은 고딕", size: 11, bold: true };
-      ws.getCell("B29").alignment = { horizontal: "center", vertical: "middle" };
-      ws.getCell("B29").border = thinBorder;
-
-      ws.getCell("G29").value = { formula: `SUM(G${DATA_START}:G${DATA_END})` };
-      ws.getCell("G29").numFmt = "#,##0";
-      ws.getCell("G29").font = { name: "맑은 고딕", size: 10, bold: true };
-      ws.getCell("G29").alignment = { horizontal: "center", vertical: "middle" };
-      ws.getCell("G29").border = thinBorder;
-
-      ws.getCell("H29").value = { formula: `SUM(H${DATA_START}:H${DATA_END})` };
-      ws.getCell("H29").numFmt = "#,##0";
-      ws.getCell("H29").font = { name: "맑은 고딕", size: 10, bold: true };
-      ws.getCell("H29").alignment = { horizontal: "center", vertical: "middle" };
-      ws.getCell("H29").border = thinBorder;
-
-      ws.getCell("I29").border = thinBorder;
-      ws.mergeCells("J29:K29");
-      ws.getCell("J29").value = { formula: `SUM(J${DATA_START}:J${DATA_END})` };
-      ws.getCell("J29").numFmt = "#,##0";
-      ws.getCell("J29").font = { name: "맑은 고딕", size: 11, bold: true };
-      ws.getCell("J29").alignment = { horizontal: "right", vertical: "middle" };
-      ws.getCell("J29").border = thinBorder;
-      ws.getCell("K29").border = thinBorder;
-      ws.getRow(29).height = 22;
-
-      // 행30~31: 빈 행 (테두리만)
-      for (let r = 30; r <= 31; r++) {
-        for (let c = 2; c <= 11; c++) {
-          ws.getCell(r, c).border = thinBorder;
-        }
-        ws.getRow(r).height = 16;
-      }
-
-      // 행32: 공급가/부가세
-      ws.mergeCells("B32:F32");
-      ws.getCell("B32").value = "공급가/부가세";
-      ws.getCell("B32").font = { name: "맑은 고딕", size: 10 };
-      ws.getCell("B32").alignment = { horizontal: "center", vertical: "middle" };
-      ws.getCell("B32").border = thinBorder;
-
-      for (let c = 7; c <= 8; c++) ws.getCell(32, c).border = thinBorder;
-
-      ws.getCell("I32").value = { formula: `J29` };
-      ws.getCell("I32").numFmt = "#,##0";
-      ws.getCell("I32").font = { name: "맑은 고딕", size: 10 };
-      ws.getCell("I32").alignment = { horizontal: "right", vertical: "middle" };
-      ws.getCell("I32").border = thinBorder;
-
-      ws.mergeCells("J32:K32");
-      ws.getCell("J32").value = { formula: `J29*0.1` };
-      ws.getCell("J32").numFmt = "#,##0";
-      ws.getCell("J32").font = { name: "맑은 고딕", size: 10 };
-      ws.getCell("J32").alignment = { horizontal: "right", vertical: "middle" };
-      ws.getCell("J32").border = thinBorder;
-      ws.getCell("K32").border = thinBorder;
-      ws.getRow(32).height = 20;
-
-      // 행33: 총계
-      ws.mergeCells("B33:F33");
-      ws.getCell("B33").value = "총    계";
-      ws.getCell("B33").font = { name: "맑은 고딕", size: 11, bold: true };
-      ws.getCell("B33").alignment = { horizontal: "center", vertical: "middle" };
-      ws.getCell("B33").border = thinBorder;
-
-      ws.getCell("G33").value = { formula: `G29` };
-      ws.getCell("G33").font = { name: "맑은 고딕", size: 10, bold: true };
-      ws.getCell("G33").alignment = { horizontal: "center", vertical: "middle" };
-      ws.getCell("G33").border = thinBorder;
-
-      ws.getCell("H33").value = { formula: `H29` };
-      ws.getCell("H33").font = { name: "맑은 고딕", size: 10, bold: true };
-      ws.getCell("H33").alignment = { horizontal: "center", vertical: "middle" };
-      ws.getCell("H33").border = thinBorder;
-
-      ws.getCell("I33").border = thinBorder;
-      ws.mergeCells("J33:K33");
-      ws.getCell("J33").value = { formula: `I32+J32` };
-      ws.getCell("J33").numFmt = "#,##0";
-      ws.getCell("J33").font = { name: "맑은 고딕", size: 11, bold: true };
-      ws.getCell("J33").alignment = { horizontal: "right", vertical: "middle" };
-      ws.getCell("J33").border = thinBorder;
-      ws.getCell("K33").border = thinBorder;
-      ws.getRow(33).height = 22;
-
-      // 행34~35: 담당자확인 / 안내문
-      ws.mergeCells("B34:D35");
-      ws.getCell("B34").value = "담당자확인";
-      ws.getCell("B34").font = { name: "맑은 고딕", size: 11, bold: true };
-      ws.getCell("B34").alignment = { horizontal: "center", vertical: "middle" };
-      ws.getCell("B34").border = thinBorder;
-      ws.getCell("E34").border = thinBorder;
-      ws.getCell("E35").border = thinBorder;
-
-      ws.mergeCells("F34:K35");
-      ws.getCell("F34").value = "* 아래 계좌로 입금부탁드립니다 *";
-      ws.getCell("F34").font = { name: "맑은 고딕", size: 11, bold: true };
-      ws.getCell("F34").alignment = { horizontal: "center", vertical: "middle" };
-      ws.getCell("F34").border = thinBorder;
-      ws.getRow(34).height = 18;
-      ws.getRow(35).height = 18;
-
-      // 행36: 계좌번호
-      ws.mergeCells("B36:K36");
-      ws.getCell("B36").value = "결재계좌번호: 955-024478-01-011  기업은행  ㈜ 다솔중기";
-      ws.getCell("B36").font = { name: "맑은 고딕", size: 11, bold: true };
-      ws.getCell("B36").alignment = { horizontal: "center", vertical: "middle" };
-      ws.getRow(36).height = 22;
-      ws.getRow(37).height = 8;
-      ws.getRow(38).height = 8;
-
-      // ═══════════════════════════════════════════════
-      // 을지 (39행~) — 청구 리스트 (개별+소계)
-      // ═══════════════════════════════════════════════
-
-      // 행39: 업체명
-      ws.mergeCells("B39:K39");
-      ws.getCell("B39").value = client;
-      ws.getCell("B39").font = { name: "맑은 고딕", size: 12, bold: true };
-      ws.getCell("B39").alignment = { horizontal: "center", vertical: "middle" };
-      ws.getCell("B39").border = thinBorder;
-      ws.getRow(39).height = 22;
-
-      // 행40: 청구 리스트 타이틀
-      ws.mergeCells("B40:K40");
-      const monthLabel = `${parseInt(eD.slice(5, 7))}월`;
-      ws.getCell("B40").value = `( ${monthLabel} 청구 리스트 )`;
-      ws.getCell("B40").font = { name: "맑은 고딕", size: 11, bold: true };
-      ws.getCell("B40").alignment = { horizontal: "center", vertical: "middle" };
-      ws.getCell("B40").border = thinBorder;
-      ws.getRow(40).height = 20;
-
-      // 행41: 헤더
-      const sub_headerRow = 41;
-      headers.forEach((h, i) => {
-        const cell = ws.getCell(sub_headerRow, 2 + i);
-        cell.value = h;
-        cell.font = { name: "맑은 고딕", size: 10, bold: true };
-        cell.alignment = { horizontal: "center", vertical: "middle" };
-        cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFE7E6E6" } };
-        cell.border = thinBorder;
-      });
-      ws.getRow(sub_headerRow).height = 22;
-
-      // ─────────────────────────────────────────────
-      // 을지: 그룹별로 개별 행 + 소계행(노란 배경)
-      // ─────────────────────────────────────────────
-      // 그룹 키별로 원본 row들 모음
-      const detailGroupMap = new Map();
-      rows.forEach(r => {
-        const from = r.from || "";
-        const to = r.to || "";
-        const mat = r.work?.material || "";
-        const unit = r.work?.unit || "";
-        const isM3 = unit === "㎥" || unit === "m³";
-        const dayNum = r.date ? parseInt(r.date.split("-")[2]) : 0;
-        const key = `${from}||${to}||${mat}`;
-        if (!detailGroupMap.has(key)) {
-          detailGroupMap.set(key, { from, to, mat, isM3, items: [], firstDay: dayNum });
-        }
-        const g = detailGroupMap.get(key);
-        g.items.push(r);
-        if (dayNum && (g.firstDay === 0 || dayNum < g.firstDay)) g.firstDay = dayNum;
-      });
-      const detailGroups = Array.from(detailGroupMap.values()).sort((a, b) => {
-        if (a.firstDay !== b.firstDay) return (a.firstDay || 0) - (b.firstDay || 0);
-        return a.from.localeCompare(b.from);
-      });
-
-      let curRow = 42;
-      const SUB_DETAIL_START = curRow;
-
-      detailGroups.forEach((g) => {
-        // 그룹 내 일자 오름차순 정렬
-        g.items.sort((a, b) => (a.date || "").localeCompare(b.date || ""));
-
-        g.items.forEach(r => {
-          ws.getRow(curRow).height = 17;
-          for (let c = 2; c <= 11; c++) {
-            const cell = ws.getCell(curRow, c);
-            cell.border = thinBorder;
-            cell.font = { name: "맑은 고딕", size: 10 };
-            cell.alignment = { vertical: "middle", horizontal: "center" };
-          }
-          ws.getCell(curRow, 2).value = fmtMD(r.date);   // B 월/일
-          ws.getCell(curRow, 3).value = r.vehicle || ""; // C no. (차량번호!)
-          ws.getCell(curRow, 4).value = r.from || "";   // D 상차지
-          ws.getCell(curRow, 5).value = r.to || "";     // E 하차지
-          ws.getCell(curRow, 6).value = r.work?.material || ""; // F 품명
-          const qty = Number(r.work?.qty) || 0;
-          if (!g.isM3 && qty) ws.getCell(curRow, 7).value = qty;       // G 수량
-          if (g.isM3 && qty) ws.getCell(curRow, 8).value = qty;        // H ㎥
-          curRow++;
+      for(let ri=DS; ri<=DE; ri++) {
+        const idx = ri - DS;
+        const g = groups[idx];
+        "CDEFGHIJKL".split("").forEach(c => {
+          ws[`${c}${ri}`] = { v:"", t:"s", s:SB(false,"left") };
         });
-
-        // 소계 행 (노란 배경)
-        ws.getRow(curRow).height = 17;
-        for (let c = 2; c <= 11; c++) {
-          const cell = ws.getCell(curRow, c);
-          cell.border = thinBorder;
-          cell.font = { name: "맑은 고딕", size: 10, bold: true };
-          cell.alignment = { vertical: "middle", horizontal: "center" };
-          cell.fill = yellowFill;
+        ws[`C${ri}`] = { v:"", t:"s", s:SB(false,"center") };
+        ws[`D${ri}`] = { v:"", t:"s", s:SB(false,"center") };
+        if(g) {
+          ws[`D${ri}`] = { v:idx+1, t:"n", s:SB(false,"center") };
+          ws[`E${ri}`] = { v:g.from||"", t:"s", s:SB(false,"left") };
+          ws[`F${ri}`] = { v:g.to||"", t:"s", s:SB(false,"left") };
+          ws[`G${ri}`] = { v:g.mat||"", t:"s", s:SB(false,"left") };
+          if(!g.isM3) ws[`H${ri}`] = { v:g.qty, t:"n", s:SB(false,"center") };
+          if(g.isM3)  ws[`I${ri}`] = { v:g.qty, t:"n", s:SB(false,"center") };
+          if(!g.isM3) ws[`K${ri}`] = { f:`H${ri}*J${ri}`, t:"n", s:SB(false,"right") };
+          else        ws[`K${ri}`] = { f:`I${ri}*J${ri}`, t:"n", s:SB(false,"right") };
         }
-        // 소계: 그룹 내 합산
-        const groupStartRow = curRow - g.items.length;
-        ws.getCell(curRow, 7).value = { formula: `SUM(G${groupStartRow}:G${curRow - 1})` };
-        ws.getCell(curRow, 8).value = { formula: `SUM(H${groupStartRow}:H${curRow - 1})` };
-        curRow++;
+      }
+
+      // ─ 행34~35: 계
+      mg(ws,33,2,34,6); mg(ws,33,10,33,11);
+      C2(ws,"C34","  계",SB(true,"left"));
+      CF(ws,"H34",`SUM(H${DS}:H${DE})`,SB(true,"center"));
+      CF(ws,"I34",`SUM(I${DS}:I${DE})`,SB(true,"center"));
+      C2(ws,"J34","",SB(true,"right"));
+      CF(ws,"K34",`SUM(K${DS}:K${DE})`,SB(true,"right"));
+      // 35행 빈행
+      "CDEFGHIJKL".split("").forEach(c => {
+        ws[`${c}35`] = { v:"", t:"s", s:SB(false,"left") };
       });
 
-      // ═══════════════════════════════════════════════
-      // 인쇄 영역 설정
-      // ═══════════════════════════════════════════════
-      ws.pageSetup.printArea = `B1:K${curRow - 1}`;
-      ws.pageSetup.margins = {
-        left: 0.4, right: 0.4, top: 0.5, bottom: 0.5,
-        header: 0.3, footer: 0.3
-      };
+      // ─ 행36: K36 참조용 빈행
+      mg(ws,35,2,35,6); mg(ws,35,7,35,9); mg(ws,35,10,35,11);
+      "CDEFGHIJKL".split("").forEach(c => {
+        ws[`${c}36`] = { v:"", t:"s", s:SB(false,"left") };
+      });
+
+      // ─ 행37: 공급가/부가세
+      mg(ws,36,2,36,6); mg(ws,36,7,36,9); mg(ws,36,10,36,11);
+      C2(ws,"C37","공급가/부가세",SB(false,"left"));
+      CF(ws,"H37","K34-K36",SB(false,"right"));
+      C2(ws,"I37","",SB(false,"right"));
+      C2(ws,"J37","",SB(false,"right"));
+      CF(ws,"K37","H37*0.1",SB(false,"right"));
+
+      // ─ 행38: 총계
+      mg(ws,37,2,37,6); mg(ws,37,7,37,9); mg(ws,37,10,37,11);
+      C2(ws,"C38","총    계",SB(true,"left"));
+      CF(ws,"H38","SUM(H34:H35)",SB(true,"right"));
+      CF(ws,"I38","SUM(I34:I35)",SB(true,"right"));
+      C2(ws,"J38","",SB(true,"right"));
+      CF(ws,"K38","H37+K37",SB(true,"right"));
+
+      // ─ 행39~40: 담당자확인
+      mg(ws,38,2,39,4); mg(ws,38,5,39,5); mg(ws,38,6,39,11);
+      C2(ws,"C39","담당자확인",S(false,"center"));
+      C2(ws,"G39","* 아래 계좌로 입금부탁드립니다 *",{...S(true,"center"),fill:{fgColor:{rgb:"FFFF00"},patternType:"solid"}});
+
+      // ─ 행41: 계좌
+      mg(ws,40,2,40,11);
+      C2(ws,"C41","결재계좌번호: 955-024478-01-011 기업은행 ㈜ 다솔중기",S(true,"left",10));
+
+      // ─ 행44: 업체명
+      mg(ws,43,2,43,11);
+      CF(ws,"C44","E5",S(true,"left",12));
+
+      // ─ 행45: 청구리스트 타이틀
+      mg(ws,44,2,44,11);
+      const mo = eD.slice(5,7).replace(/^0/,"");
+      C2(ws,"C45",`( ${mo}월 청구 리스트)`,S(false,"left"));
+
+      // ─ 행46: 상세 헤더
+      hdrs.forEach((h,i) => C2(ws,String.fromCharCode(67+i)+"46",h,SB(true,"center",11,"4472C4")));
+
+      // ─ 행47~: 상세 데이터 (날짜+차량번호)
+      let detailRow = 47;
+      sorted.forEach((row,i) => {
+        const day = row.date ? parseInt(row.date.split("-")[2]) : "";
+        const isM3 = row.work?.unit==="㎥"||row.work?.unit==="m³";
+        const qty = Number(row.work?.qty)||0;
+        const r = detailRow;
+        ws[`C${r}`] = { v:day||"", t:day?"n":"s", s:SB(false,"center") };
+        ws[`D${r}`] = { v:row.vehicle||"", t:"s", s:SB(false,"center") };
+        ws[`E${r}`] = { v:row.from||"", t:"s", s:SB(false,"left") };
+        ws[`F${r}`] = { v:row.to||"", t:"s", s:SB(false,"left") };
+        ws[`G${r}`] = { v:row.work?.material||"", t:"s", s:SB(false,"left") };
+        if(!isM3&&qty) ws[`H${r}`] = { v:qty, t:"n", s:SB(false,"center") };
+        else ws[`H${r}`] = { v:"", t:"s", s:SB(false,"center") };
+        if(isM3&&qty) ws[`I${r}`] = { v:qty, t:"n", s:SB(false,"center") };
+        else ws[`I${r}`] = { v:"", t:"s", s:SB(false,"center") };
+        ws[`J${r}`] = { v:"", t:"s", s:SB(false,"right") };
+        ws[`K${r}`] = { v:"", t:"s", s:SB(false,"right") };
+        ws[`L${r}`] = { v:"", t:"s", s:SB(false,"left") };
+        detailRow++;
+      });
+
+      ws["!ref"] = XLSX.utils.encode_range({s:{r:0,c:0},e:{r:detailRow,c:11}});
+      XLSX.utils.book_append_sheet(wb, ws, client.slice(0,31));
     });
 
-    const suffix = closingType === "mid" ? "25일마감" : "말일마감";
-    const buffer = await wb.xlsx.writeBuffer();
-    const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = `청구서_${suffix}_${sD}_${eD}.xlsx`;
-    a.click();
-    setTimeout(() => URL.revokeObjectURL(a.href), 100);
+    const suffix = closingType==="mid"?"25일마감":"말일마감";
+    xlsxDl(wb, `청구서_${suffix}_${sD}_${eD}.xlsx`);
   };
 
   // ── 기사별 정산서 xlsx — 5623/6821/6957 양식 그대로 ──────────
@@ -2510,8 +2263,8 @@ function AdminDash({ records, vehicles, setVehicles, mappings, setMappings, pric
 
           <div style={{ display: "flex", gap: 8, marginBottom: 14, flexWrap: "wrap" }}>
             <Btn onClick={downloadAll} style={{ flex: 1 }} disabled={reportRecs.length === 0}>📥 전체CSV</Btn>
-            <Btn onClick={() => downloadByClient("mid")} color={C.blue} style={{ flex: 1 }} disabled={reportRecs.length === 0}>📤 청구(25일마감)</Btn>
-            <Btn onClick={() => downloadByClient("end")} color={C.blue} style={{ flex: 1 }} disabled={reportRecs.length === 0}>📤 청구(말일마감)</Btn>
+            <Btn onClick={() => downloadByClient("mid")} color={C.blue} style={{ flex: 1 }} disabled={reportRecs.length === 0}>📤 25일마감</Btn>
+            <Btn onClick={() => downloadByClient("end")} color={C.blue} style={{ flex: 1 }} disabled={reportRecs.length === 0}>📤 말일마감</Btn>
             <Btn onClick={downloadByVehicle} color={C.purple} style={{ flex: 1 }} disabled={reportRecs.length === 0}>🚛 기사별 정산</Btn>
           </div>
 
