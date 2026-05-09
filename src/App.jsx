@@ -1838,22 +1838,46 @@ function AdminDash({ records, vehicles, setVehicles, mappings, setMappings, pric
           });
           detailRows.push(...groupRows);
         });
-        detailRows.forEach((row, idx) => {
-          const ri = 47 + idx;
-          const day = row.date ? parseInt(row.date.split("-")[2]) : "";
-          const isM3 = row.work?.unit==="㎥"||row.work?.unit==="m³";
-          const qty = Number(row.work?.qty)||0;
-          setCell("C"+ri, day||"", day?"n":"s");
-          setCell("D"+ri, row.vehicle||"");
-          setCell("E"+ri, row.from||"");
-          setCell("F"+ri, row.to||"");
-          setCell("G"+ri, row.work?.material||"");
-          if (!isM3) setCell("H"+ri, qty, "n");
-          else setCell("I"+ri, qty, "n");
+        // 현장별 소계 행 포함해서 작성
+        let detailRowIdx = 47;
+        groups.forEach(g => {
+          const groupRows = detailRows.filter(r => {
+            const isM3 = r.work?.unit==="㎥"||r.work?.unit==="m³";
+            return r.from===g.from && r.to===g.to && r.work?.material===g.mat && isM3===g.isM3;
+          });
+          // 데이터 행
+          groupRows.forEach(row => {
+            const ri = detailRowIdx;
+            const day = row.date ? (parseInt(row.date.split("-")[1])+"."+parseInt(row.date.split("-")[2])) : "";
+            const isM3 = row.work?.unit==="㎥"||row.work?.unit==="m³";
+            const qty = Number(row.work?.qty)||0;
+            setCell("C"+ri, day||"", "s");
+            setCell("D"+ri, row.vehicle||"");
+            setCell("E"+ri, row.from||"");
+            setCell("F"+ri, row.to||"");
+            setCell("G"+ri, row.work?.material||"");
+            if (!isM3) setCell("H"+ri, qty, "n");
+            else setCell("I"+ri, qty, "n");
+            detailRowIdx++;
+          });
+          // 소계 행 (노란색) - 수량/m3 숫자만
+          const subRi = detailRowIdx;
+          const yellow = { patternType:"solid", fgColor:{ rgb:"FFFF00" } };
+          const yS = { font:{name:"맑은 고딕",bold:true,sz:11}, fill:yellow, alignment:{horizontal:"center",vertical:"center"} };
+          const yR = { font:{name:"맑은 고딕",bold:true,sz:11}, fill:yellow, alignment:{horizontal:"right",vertical:"center"} };
+          "CDEFGHIJKL".split("").forEach(c => {
+            ws[c+subRi] = { v:"", t:"s", s:yS };
+          });
+          if (!g.isM3) {
+            ws["H"+subRi] = { v:g.qty, t:"n", s:yR };
+          } else {
+            ws["I"+subRi] = { v:g.qty, t:"n", s:yR };
+          }
+          detailRowIdx++;
         });
 
         // ref 업데이트
-        const lastRow = 47 + detailRows.length;
+        const lastRow = detailRowIdx + 1;
         ws["!ref"] = "A1:" + XLSX.utils.encode_cell({r:lastRow, c:15});
 
         XLSX.utils.book_append_sheet(wb, ws, client.slice(0,31));
