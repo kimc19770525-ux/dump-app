@@ -1771,15 +1771,36 @@ function AdminDash({ records, vehicles, setVehicles, mappings, setMappings, pric
           });
         }
 
-        // 현장별 합계 그룹
+        // 현장별 합계 그룹 (날짜순→차량번호순 정렬 후 그룹핑)
+        const preSorted = rows.slice().sort((a,b) => {
+          const dCmp = (a.date||"").localeCompare(b.date||"");
+          if (dCmp !== 0) return dCmp;
+          return (a.vehicle||"").localeCompare(b.vehicle||"");
+        });
         const groupMap = {};
-        rows.forEach(r => {
+        const groupOrder = []; // 그룹 순서 유지
+        preSorted.forEach(r => {
           const isM3 = r.work?.unit==="㎥"||r.work?.unit==="m³";
-          const key = r.from+"||"+r.to+"||"+(r.work?.material||"")+"||"+(isM3?"m3":"ea");
-          if (!groupMap[key]) groupMap[key] = {from:r.from,to:r.to,mat:r.work?.material,isM3,qty:0};
+          const key = (r.from||"")+"||"+(r.to||"")+"||"+(r.work?.material||"")+"||"+(isM3?"m3":"ea");
+          if (!groupMap[key]) {
+            groupMap[key] = {from:r.from,to:r.to,mat:r.work?.material,isM3,qty:0};
+            groupOrder.push(key);
+          }
           groupMap[key].qty += Number(r.work?.qty)||0;
         });
-        const groups = Object.values(groupMap);
+        // 개수 품목 먼저, m3 나중 / 각 안에서 상차지→하차지→품목 순 정렬
+        const allGroups = groupOrder.map(k => groupMap[k]);
+        const sortGroup = (arr) => arr.slice().sort((a,b) => {
+          const fCmp = (a.from||"").localeCompare(b.from||"");
+          if (fCmp !== 0) return fCmp;
+          const tCmp = (a.to||"").localeCompare(b.to||"");
+          if (tCmp !== 0) return tCmp;
+          return (a.mat||"").localeCompare(b.mat||"");
+        });
+        const groups = [
+          ...sortGroup(allGroups.filter(g => !g.isM3)),
+          ...sortGroup(allGroups.filter(g => g.isM3))
+        ];
 
         // 데이터 입력
         const setCell = (addr, val, t) => {
@@ -1803,9 +1824,21 @@ function AdminDash({ records, vehicles, setVehicles, mappings, setMappings, pric
         // 청구리스트 제목
         setCell("C45", "( "+mo+"월 청구 리스트)");
 
-        // 상세 데이터 (47행~)
-        const sorted = rows.slice().sort((a,b)=>(a.date||"").localeCompare(b.date||""));
-        sorted.forEach((row, idx) => {
+        // 상세 데이터 (47행~) — 갑지 현장 순서 그대로, 각 현장 내 날짜→차량번호순
+        // groups 순서: 개수품목 먼저, m3 나중 (갑지와 동일)
+        const detailRows = [];
+        groups.forEach(g => {
+          const groupRows = rows.filter(r => {
+            const isM3 = r.work?.unit==="㎥"||r.work?.unit==="m³";
+            return r.from===g.from && r.to===g.to && r.work?.material===g.mat && isM3===g.isM3;
+          }).sort((a,b) => {
+            const dCmp = (a.date||"").localeCompare(b.date||"");
+            if (dCmp !== 0) return dCmp;
+            return (a.vehicle||"").localeCompare(b.vehicle||"");
+          });
+          detailRows.push(...groupRows);
+        });
+        detailRows.forEach((row, idx) => {
           const ri = 47 + idx;
           const day = row.date ? parseInt(row.date.split("-")[2]) : "";
           const isM3 = row.work?.unit==="㎥"||row.work?.unit==="m³";
@@ -1820,7 +1853,7 @@ function AdminDash({ records, vehicles, setVehicles, mappings, setMappings, pric
         });
 
         // ref 업데이트
-        const lastRow = 47 + sorted.length;
+        const lastRow = 47 + detailRows.length;
         ws["!ref"] = "A1:" + XLSX.utils.encode_cell({r:lastRow, c:15});
 
         XLSX.utils.book_append_sheet(wb, ws, client.slice(0,31));
