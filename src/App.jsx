@@ -1714,8 +1714,7 @@ function AdminDash({ records, vehicles, setVehicles, mappings, setMappings, pric
 
   // ── 업체별 청구서 xlsx — 템플릿 복사 방식 ──────────────────
   const downloadByClient = (closingType) => {
-    const XLSX = window.XLSX || (typeof require !== 'undefined' ? require('xlsx') : null);
-    if (!XLSX) { alert("XLSX 라이브러리 없음"); return; }
+    // XLSX는 상단 import로 로드됨
 
     const now = new Date();
     const y = now.getFullYear(), m = now.getMonth();
