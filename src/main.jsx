@@ -43,12 +43,21 @@ const sb = {
         data: record,
         saved_at: record.savedAt || new Date().toISOString()
       }
-      const res = await fetch(`${SUPABASE_URL}/rest/v1/records`, {
-        method: 'POST',
-        headers,
+      // 기존 레코드 수정 — PATCH 방식
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/records?id=eq.${record.id}`, {
+        method: 'PATCH',
+        headers: { ...headers, 'Prefer': 'return=representation' },
         body: JSON.stringify(body)
       })
-      if (!res.ok) { console.error('upsert error:', res.status, await res.text()) }
+      if (!res.ok) {
+        // PATCH 실패시 POST로 새로 생성
+        const res2 = await fetch(`${SUPABASE_URL}/rest/v1/records`, {
+          method: 'POST',
+          headers: { ...headers, 'Prefer': 'resolution=merge-duplicates' },
+          body: JSON.stringify(body)
+        })
+        if (!res2.ok) console.error('upsert error:', res2.status, await res2.text())
+      }
     } catch(e) { console.error('upsert exception:', e) }
   },
 
