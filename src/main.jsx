@@ -8,8 +8,7 @@ const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZ
 const headers = {
   'apikey': SUPABASE_KEY,
   'Authorization': `Bearer ${SUPABASE_KEY}`,
-  'Content-Type': 'application/json',
-  'Prefer': 'resolution=merge-duplicates'
+  'Content-Type': 'application/json'
 }
 
 const sb = {
@@ -46,7 +45,7 @@ const sb = {
       // POST with merge-duplicates — 신규/수정 모두 처리
       const res = await fetch(`${SUPABASE_URL}/rest/v1/records`, {
         method: 'POST',
-        headers: { ...headers, 'Prefer': 'resolution=merge-duplicates' },
+        headers: { ...headers, 'Prefer': 'resolution=merge-duplicates,return=minimal' },
         body: JSON.stringify(body)
       })
       if (!res.ok) { console.error('upsert error:', res.status, await res.text()) }
@@ -56,7 +55,6 @@ const sb = {
   async update(record) {
     try {
       const body = {
-        id: record.id,
         type: record.type || 'report',
         date: record.date || '',
         vehicle: record.vehicle || '',
@@ -65,7 +63,7 @@ const sb = {
       }
       const res = await fetch(`${SUPABASE_URL}/rest/v1/records?id=eq.${record.id}`, {
         method: 'PATCH',
-        headers: { ...headers, 'Prefer': 'return=representation' },
+        headers: { ...headers, 'Content-Type': 'application/json' },
         body: JSON.stringify(body)
       })
       if (!res.ok) { console.error('update error:', res.status, await res.text()) }
