@@ -1422,6 +1422,25 @@ function PendingReports({ records, onRefresh }) {
                         {["개","m³","톤"].map(u => <option key={u}>{u}</option>)}
                       </select>
                       <button onClick={async () => {
+                        // 수정만 저장 (승인 X)
+                        const updated = {
+                          ...r,
+                          date: e.date,
+                          from: e.from,
+                          to: e.to,
+                          work: { ...r.work, material: e.material, qty: e.qty, unit: e.unit }
+                        };
+                        try {
+                          await window.sbRecords.update(updated);
+                          setEditMap(prev => { const n={...prev}; delete n[r.id]; return n; });
+                          onRefresh();
+                        } catch(err) { alert("저장 실패: " + err); }
+                      }} style={{
+                        background:C.blue, border:"none", borderRadius:8, padding:"6px 14px",
+                        color:"#fff", fontSize:12, fontWeight:700, cursor:"pointer", whiteSpace:"nowrap"
+                      }}>💾 저장</button>
+                      <button onClick={async () => {
+                        // 수정 후 승인
                         const updated = {
                           ...r,
                           status: "approved",
@@ -1431,7 +1450,7 @@ function PendingReports({ records, onRefresh }) {
                           work: { ...r.work, material: e.material, qty: e.qty, unit: e.unit }
                         };
                         try {
-                          await window.sbRecords.upsert(updated);
+                          await window.sbRecords.update(updated);
                           setApprovedIds(prev => new Set([...prev, r.id]));
                           setEditMap(prev => { const n={...prev}; delete n[r.id]; return n; });
                         } catch(err) { alert("저장 실패: " + err); }
@@ -2287,7 +2306,7 @@ function AdminDash({ records, vehicles, setVehicles, mappings, setMappings, pric
       {adminTab === "mapping" && (
         <MappingTab
           mappings={mappings}
-          setMappings={setMappings}
+          setMappings={updateMappings}
           records={records}
         />
       )}
