@@ -54,16 +54,23 @@ const sb = {
 
   async update(record) {
     try {
+      // 1. 먼저 삭제
+      await fetch(`${SUPABASE_URL}/rest/v1/records?id=eq.${record.id}`, {
+        method: 'DELETE',
+        headers
+      })
+      // 2. 새로 삽입
       const body = {
+        id: record.id,
         type: record.type || 'report',
         date: record.date || '',
         vehicle: record.vehicle || '',
         data: record,
         saved_at: new Date().toISOString()
       }
-      const res = await fetch(`${SUPABASE_URL}/rest/v1/records?id=eq.${record.id}`, {
-        method: 'PATCH',
-        headers: { ...headers, 'Content-Type': 'application/json' },
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/records`, {
+        method: 'POST',
+        headers: { ...headers, 'Prefer': 'return=minimal' },
         body: JSON.stringify(body)
       })
       if (!res.ok) { console.error('update error:', res.status, await res.text()) }
