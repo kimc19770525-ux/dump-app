@@ -1588,7 +1588,7 @@ function DriverScreen({ vehicles, locationHints, locations, records, onSave, onR
 // ════════════════════════════════════════════════════════════
 // 관리자 대시보드
 // ════════════════════════════════════════════════════════════
-function AdminDash({ records, vehicles, setVehicles, mappings, setMappings, prices, setPrices, locations, setLocations, driverSettings, setDriverSettings, adminPw, setAdminPw, onLock, onSaveExpense, onRefresh }) {
+function AdminDash({ records, vehicles, setVehicles, mappings, setMappings, onSaveMappings, prices, setPrices, locations, setLocations, driverSettings, setDriverSettings, adminPw, setAdminPw, onLock, onSaveExpense, onRefresh }) {
   const [period, setPeriod]         = useState("mid");
   const [customStart, setCustomStart] = useState("");
   const [customEnd, setCustomEnd]   = useState("");
@@ -2306,7 +2306,7 @@ function AdminDash({ records, vehicles, setVehicles, mappings, setMappings, pric
       {adminTab === "mapping" && (
         <MappingTab
           mappings={mappings}
-          setMappings={updateMappings}
+          setMappings={onSaveMappings}
           records={records}
         />
       )}
@@ -2504,7 +2504,7 @@ export default function App() {
             ) : (
               <AdminDash
                 records={records} vehicles={vehicles} setVehicles={updateVehicles}
-                mappings={mappings} setMappings={updateMappings}
+                mappings={mappings} setMappings={updateMappings} onSaveMappings={updateMappings}
                 prices={prices} setPrices={updatePrices}
                 locations={locations} setLocations={updateLocations}
                 driverSettings={driverSettings} setDriverSettings={updateDriverSettings}
