@@ -82,7 +82,12 @@ const sb = {
     const id = keyId[key] || 9
     try {
       const body = { id, type: 'settings', date: key, vehicle: '', data: { key, value }, saved_at: new Date().toISOString() }
-      const res = await fetch(`${SUPABASE_URL}/rest/v1/records`, { method: 'POST', headers, body: JSON.stringify(body) })
+      // merge-duplicates: 같은 id면 덮어씀
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/records`, {
+        method: 'POST',
+        headers: { ...headers, 'Prefer': 'resolution=merge-duplicates,return=minimal' },
+        body: JSON.stringify(body)
+      })
       if (!res.ok) console.error('saveSettings error:', res.status, await res.text())
     } catch(e) { console.error('saveSettings exception:', e) }
   },
