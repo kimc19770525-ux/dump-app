@@ -111,11 +111,23 @@ const sb = {
 
 window.storage = {
   get: async (key) => {
-    const val = await sb.getSettingByKey(key)
-    return val !== null && val !== undefined ? { key, value: val } : null
+    // Supabase에서 먼저 시도, 실패하면 localStorage
+    try {
+      const val = await sb.getSettingByKey(key)
+      if (val !== null && val !== undefined) {
+        localStorage.setItem('sb_' + key, typeof val === 'string' ? val : JSON.stringify(val))
+        return { key, value: typeof val === 'string' ? val : JSON.stringify(val) }
+      }
+    } catch(e) {}
+    // localStorage 폴백
+    const local = localStorage.getItem('sb_' + key)
+    return local ? { key, value: local } : null
   },
   set: async (key, value) => {
-    await sb.saveSettings(key, value)
+    // localStorage에 먼저 저장 (즉시)
+    localStorage.setItem('sb_' + key, value)
+    // Supabase에도 저장 (비동기)
+    try { await sb.saveSettings(key, value) } catch(e) { console.error('Supabase 저장 실패:', e) }
     return { key, value }
   }
 }
