@@ -2037,7 +2037,7 @@ function AdminDash({ records, vehicles, setVehicles, mappings, setMappings, onSa
         C2(ws1, `J${r}`, "", SB(false, "right"));
         if (price) { ws1[`K${r}`] = { v: price, t: "n", s: SB(false, "right") }; }
         else { C2(ws1, `K${r}`, "", SB(false, "right")); }
-        CF(ws1, `L${r}`, `(K${r}*H${r})+(K${r}*I${r})`, SB(false, "right"));
+        CF(ws1, `L${r}`, `IFERROR(K${r}*H${r},0)+IFERROR(K${r}*I${r},0)`, SB(false, "right"));
       });
 
       // 합계행
