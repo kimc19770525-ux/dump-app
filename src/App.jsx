@@ -2411,7 +2411,7 @@ function AdminDash({ records, vehicles, setVehicles, mappings, setMappings, onSa
       customPrices={customPrices}
       setCustomPrices={setCustomPrices}
       onClose={()=>setShowPriceModal(false)}
-      onConfirm={()=>{ setShowPriceModal(false); downloadByVehicle(customPrices); }}
+      onConfirm={()=>{ const p = {...customPrices}; setShowPriceModal(false); setTimeout(()=>downloadByVehicle(p), 100); }}
     />}
     </>
   );
