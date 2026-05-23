@@ -1013,64 +1013,6 @@ function MappingTab({ mappings, setMappings, records }) {
       )}
     </div>
 
-    {/* 기사별 정산 단가 입력 모달 */}
-    {showPriceModal && (() => {
-      const now = new Date();
-      const y = now.getFullYear(), m = now.getMonth();
-      const vStart = new Date(y, m, 1).toISOString().slice(0,10);
-      const vEnd   = new Date(y, m+1, 0).toISOString().slice(0,10);
-      const periodRecs = records.filter(r => r.type==="report" && r.date>=vStart && r.date<=vEnd && r.status!=="pending");
-      const locSet = {};
-      periodRecs.forEach(r => {
-        const k = (r.from||"")+"||"+(r.to||"");
-        if (!locSet[k]) locSet[k] = { from:r.from, to:r.to };
-      });
-      const locs = Object.entries(locSet).sort(([a],[b])=>a.localeCompare(b));
-      return (
-        <div style={{
-          position:"fixed", top:0, left:0, right:0, bottom:0, zIndex:9999,
-          background:"rgba(0,0,0,0.85)", display:"flex", flexDirection:"column",
-          justifyContent:"center", padding:16
-        }}>
-          <div style={{ background:C.card, borderRadius:16, overflow:"hidden", maxHeight:"85vh", display:"flex", flexDirection:"column" }}>
-            <div style={{ padding:"16px 16px 8px", borderBottom:`1px solid ${C.border}` }}>
-              <div style={{ fontSize:16, fontWeight:700, color:C.accent, marginBottom:4 }}>🚛 기사별 정산 — 현장별 단가 입력</div>
-              <div style={{ fontSize:12, color:C.muted }}>운반단가를 입력 후 출력하세요 (빈칸은 기존 단가 사용)</div>
-            </div>
-            <div style={{ overflowY:"auto", flex:1, padding:12 }}>
-              {locs.length === 0 && <div style={{ padding:20, color:C.muted, textAlign:"center" }}>이 기간 일보가 없어요</div>}
-              {locs.map(([k, loc]) => (
-                <div key={k} style={{ display:"flex", alignItems:"center", gap:8, marginBottom:8, background:C.card2, borderRadius:10, padding:"10px 12px" }}>
-                  <div style={{ flex:1, fontSize:13 }}>
-                    <span style={{ color:C.blue, fontWeight:700 }}>{loc.from}</span>
-                    <span style={{ color:C.muted, margin:"0 6px" }}>→</span>
-                    <span style={{ color:C.green, fontWeight:700 }}>{loc.to}</span>
-                  </div>
-                  <input
-                    type="number"
-                    value={customPrices[k] || ""}
-                    onChange={e => setCustomPrices(prev => ({ ...prev, [k]: Number(e.target.value) }))}
-                    placeholder="단가"
-                    style={{ width:90, background:C.card, border:`1.5px solid ${C.border}`, borderRadius:8, padding:"7px 10px", color:C.text, fontSize:13, outline:"none", textAlign:"right" }}
-                  />
-                  <span style={{ fontSize:11, color:C.muted }}>원</span>
-                </div>
-              ))}
-            </div>
-            <div style={{ display:"flex", gap:8, padding:12, borderTop:`1px solid ${C.border}` }}>
-              <button onClick={() => setShowPriceModal(false)} style={{
-                flex:1, padding:12, borderRadius:10, background:"transparent",
-                border:`1px solid ${C.border}`, color:C.muted, fontSize:14, cursor:"pointer"
-              }}>취소</button>
-              <button onClick={() => { setShowPriceModal(false); downloadByVehicle(customPrices); }} style={{
-                flex:2, padding:12, borderRadius:10, background:C.purple,
-                border:"none", color:"#fff", fontSize:14, fontWeight:700, cursor:"pointer"
-              }}>✅ 출력</button>
-            </div>
-          </div>
-        </div>
-      );
-    })()}
   );
 }
 
@@ -1113,8 +1055,7 @@ function MappingRow({ m, color, onDelete, onEdit }) {
 // 마감 탭 컴포넌트
 // ════════════════════════════════════════════════════════════
 function ClosingTab({ records, closings, onClose, onRefresh, getClients, getPrice, startD, endD }) {
-  const [showPriceModal, setShowPriceModal] = useState(false);
-  const [customPrices, setCustomPrices] = useState({});
+
   const [selMonth, setSelMonth] = useState("");
   const [viewMonth, setViewMonth] = useState("");
 
@@ -1629,6 +1570,54 @@ function TodayReports({ todayRecs, todayStr }) {
         );
       })}
     </div>
+
+    {/* 기사별 정산 단가 입력 모달 */}
+    {showPriceModal && (() => {
+      const now = new Date();
+      const y = now.getFullYear(), mo = now.getMonth();
+      const vStart = new Date(y, mo, 1).toISOString().slice(0,10);
+      const vEnd   = new Date(y, mo+1, 0).toISOString().slice(0,10);
+      const periodRecs = records.filter(r => r.type==="report" && r.date>=vStart && r.date<=vEnd && r.status!=="pending");
+      const locSet = {};
+      periodRecs.forEach(r => {
+        const k = (r.from||"")+"||"+(r.to||"");
+        if (!locSet[k]) locSet[k] = { from:r.from, to:r.to };
+      });
+      const locs = Object.entries(locSet).sort(([a],[b])=>a.localeCompare(b));
+      return (
+        <div style={{
+          position:"fixed", top:0, left:0, right:0, bottom:0, zIndex:9999,
+          background:"rgba(0,0,0,0.85)", display:"flex", flexDirection:"column",
+          justifyContent:"center", padding:16
+        }}>
+          <div style={{ background:C.card, borderRadius:16, overflow:"hidden", maxHeight:"85vh", display:"flex", flexDirection:"column" }}>
+            <div style={{ padding:"16px 16px 8px", borderBottom:`1px solid ${C.border}` }}>
+              <div style={{ fontSize:16, fontWeight:700, color:C.accent, marginBottom:4 }}>🚛 기사별 정산 — 현장별 단가 입력</div>
+              <div style={{ fontSize:12, color:C.muted }}>운반단가 입력 후 출력 (빈칸은 기존 단가 사용)</div>
+            </div>
+            <div style={{ overflowY:"auto", flex:1, padding:12 }}>
+              {locs.length === 0 && <div style={{ padding:20, color:C.muted, textAlign:"center" }}>이 기간 일보가 없어요</div>}
+              {locs.map(([k, loc]) => (
+                <div key={k} style={{ display:"flex", alignItems:"center", gap:8, marginBottom:8, background:C.card2, borderRadius:10, padding:"10px 12px" }}>
+                  <div style={{ flex:1, fontSize:13 }}>
+                    <span style={{ color:C.blue, fontWeight:700 }}>{loc.from}</span>
+                    <span style={{ color:C.muted, margin:"0 6px" }}>→</span>
+                    <span style={{ color:C.green, fontWeight:700 }}>{loc.to}</span>
+                  </div>
+                  <input type="number" value={customPrices[k]||""} onChange={e=>setCustomPrices(prev=>({...prev,[k]:Number(e.target.value)}))} placeholder="단가"
+                    style={{ width:90, background:C.card, border:`1.5px solid ${C.border}`, borderRadius:8, padding:"7px 10px", color:C.text, fontSize:13, outline:"none", textAlign:"right" }} />
+                  <span style={{ fontSize:11, color:C.muted }}>원</span>
+                </div>
+              ))}
+            </div>
+            <div style={{ display:"flex", gap:8, padding:12, borderTop:`1px solid ${C.border}` }}>
+              <button onClick={()=>setShowPriceModal(false)} style={{ flex:1, padding:12, borderRadius:10, background:"transparent", border:`1px solid ${C.border}`, color:C.muted, fontSize:14, cursor:"pointer" }}>취소</button>
+              <button onClick={()=>{ setShowPriceModal(false); downloadByVehicle(customPrices); }} style={{ flex:2, padding:12, borderRadius:10, background:C.purple, border:"none", color:"#fff", fontSize:14, fontWeight:700, cursor:"pointer" }}>✅ 출력</button>
+            </div>
+          </div>
+        </div>
+      );
+    })()}
   );
 }
 
@@ -1651,6 +1640,8 @@ function DriverScreen({ vehicles, locationHints, locations, records, onSave, onR
 // ════════════════════════════════════════════════════════════
 function AdminDash({ records, vehicles, setVehicles, mappings, setMappings, onSaveMappings, prices, setPrices, locations, setLocations, driverSettings, setDriverSettings, adminPw, setAdminPw, onLock, onSaveExpense, onRefresh }) {
   const [period, setPeriod]         = useState("mid");
+  const [showPriceModal, setShowPriceModal] = useState(false);
+  const [customPrices, setCustomPrices]     = useState({});
   const [customStart, setCustomStart] = useState("");
   const [customEnd, setCustomEnd]   = useState("");
   const [adminTab, setAdminTab]     = useState("report");
