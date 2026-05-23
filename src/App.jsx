@@ -2093,6 +2093,7 @@ function AdminDash({ records, vehicles, setVehicles, mappings, setMappings, onSa
   const totalAdvance   = advanceRecs.reduce((s,r) => s+(Number(r.amount)||0), 0);
 
   return (
+    <>
     <div style={{ padding: "16px", maxWidth: 700, margin: "0 auto" }}>
 
       {/* ── 수정 모달 ── */}
@@ -2360,7 +2361,6 @@ function AdminDash({ records, vehicles, setVehicles, mappings, setMappings, onSa
         </>
       )}
     </div>
-
     {/* 기사별 정산 단가 입력 모달 */}
     {showPriceModal && (() => {
       const now = new Date();
@@ -2404,6 +2404,7 @@ function AdminDash({ records, vehicles, setVehicles, mappings, setMappings, onSa
         </div>
       );
     })()}
+    </>
   );
 }
 
