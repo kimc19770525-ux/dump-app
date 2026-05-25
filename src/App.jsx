@@ -1849,7 +1849,8 @@ function AdminDash({ records, vehicles, setVehicles, mappings, setMappings, onSa
         const groupMap = {};
         const groupOrder = []; // 그룹 순서 유지
         preSorted.forEach(r => {
-          const isM3 = r.work?.unit==="㎥"||r.work?.unit==="m³";
+          const M3_LIST = ["모래","13mm","25mm","40mm","혼합","석분"];
+          const isM3 = M3_LIST.includes(r.work?.material) || r.work?.unit==="㎥"||r.work?.unit==="m³";
           const key = (r.from||"")+"||"+(r.to||"")+"||"+(r.work?.material||"")+"||"+(isM3?"m3":"ea");
           if (!groupMap[key]) {
             groupMap[key] = {from:r.from,to:r.to,mat:r.work?.material,isM3,qty:0};
@@ -1918,7 +1919,8 @@ function AdminDash({ records, vehicles, setVehicles, mappings, setMappings, onSa
           groupRows.forEach(row => {
             const ri = detailRowIdx;
             const day = row.date ? (parseInt(row.date.split("-")[1])+"."+parseInt(row.date.split("-")[2])) : "";
-            const isM3 = row.work?.unit==="㎥"||row.work?.unit==="m³";
+            const M3_LIST = ["모래","13mm","25mm","40mm","혼합","석분"];
+            const isM3 = M3_LIST.includes(row.work?.material) || row.work?.unit==="㎥"||row.work?.unit==="m³";
             const qty = Number(row.work?.qty)||0;
             setCell("C"+ri, day||"", "s");
             setCell("D"+ri, row.vehicle||"");
@@ -1932,8 +1934,8 @@ function AdminDash({ records, vehicles, setVehicles, mappings, setMappings, onSa
           // 소계 행 (노란색) - 수량/m3 숫자만
           const subRi = detailRowIdx;
           const yellow = { patternType:"solid", fgColor:{ rgb:"FFFF00" } };
-          const yS = { font:{name:"맑은 고딕",bold:true,sz:11}, fill:yellow, alignment:{horizontal:"center",vertical:"center"} };
-          const yR = { font:{name:"맑은 고딕",bold:true,sz:11}, fill:yellow, alignment:{horizontal:"right",vertical:"center"} };
+          const yS = { font:{name:"돋움",bold:true,sz:10}, fill:yellow, alignment:{horizontal:"center",vertical:"center"} };
+          const yR = { font:{name:"돋움",bold:true,sz:10}, fill:yellow, alignment:{horizontal:"right",vertical:"center"} };
           "CDEFGHIJKL".split("").forEach(c => {
             ws[c+subRi] = { v:"", t:"s", s:yS };
           });
