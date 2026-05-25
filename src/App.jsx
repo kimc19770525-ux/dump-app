@@ -1895,6 +1895,13 @@ function AdminDash({ records, vehicles, setVehicles, mappings, setMappings, onSa
         // 청구리스트 제목
         setCell("C45", "( "+mo+"월 청구 리스트)");
 
+        // 상세 데이터 영역(47행~) 전체 삭제 — 템플릿에 박힌 이전 데이터 완전 제거
+        Object.keys(ws).forEach(key => {
+          if (key.startsWith("!")) return;
+          const rowNum = parseInt(key.replace(/[A-Z]/g, ""), 10);
+          if (!isNaN(rowNum) && rowNum >= 47) delete ws[key];
+        });
+
         // 상세 데이터 (47행~) — 갑지 현장 순서 그대로, 각 현장 내 날짜→차량번호순
         // groups 순서: 개수품목 먼저, m3 나중 (갑지와 동일)
         const detailRows = [];
