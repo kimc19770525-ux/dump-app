@@ -1770,7 +1770,7 @@ function AdminDash({ records, vehicles, setVehicles, mappings, setMappings, onSa
   };
 
   const cellStyle = (bold, align, color, bgColor, border) => ({
-    font: { name: "맑은 고딕", bold: !!bold, color: color ? { rgb: color } : undefined },
+    font: { name: "돋움", sz: 10, bold: !!bold, color: color ? { rgb: color } : undefined },
     alignment: { horizontal: align || "left", vertical: "center", wrapText: true },
     fill: bgColor ? { fgColor: { rgb: bgColor }, patternType: "solid" } : undefined,
     border: border ? {
@@ -1794,7 +1794,7 @@ function AdminDash({ records, vehicles, setVehicles, mappings, setMappings, onSa
       sD = localDate(y, m, 1); eD = localDate(y, m + 1, 0);
     }
 
-    const inR = r => r.date >= sD && r.date <= eD;
+    const inR = r => r.date && r.date.match(/^\d{4}-\d{2}-\d{2}$/) && r.date >= sD && r.date <= eD;
     const recs = records.filter(r => r.type === "report" && inR(r) && r.status !== "pending");
 
     const byCl = {};
@@ -1850,7 +1850,7 @@ function AdminDash({ records, vehicles, setVehicles, mappings, setMappings, onSa
         const groupOrder = []; // 그룹 순서 유지
         preSorted.forEach(r => {
           const M3_LIST = ["모래","13mm","25mm","40mm","혼합","석분"];
-          const isM3 = M3_LIST.includes(r.work?.material) || r.work?.unit==="㎥"||r.work?.unit==="m³";
+          const isM3 = M3_LIST.includes(r.work?.material) || (r.work?.unit==="㎥"||r.work?.unit==="m³");
           const key = (r.from||"")+"||"+(r.to||"")+"||"+(r.work?.material||"")+"||"+(isM3?"m3":"ea");
           if (!groupMap[key]) {
             groupMap[key] = {from:r.from,to:r.to,mat:r.work?.material,isM3,qty:0};
@@ -1873,11 +1873,12 @@ function AdminDash({ records, vehicles, setVehicles, mappings, setMappings, onSa
         ];
 
         // 데이터 입력
+        const dS = { font:{name:"돋움",sz:10}, alignment:{vertical:"center"} };
         const setCell = (addr, val, t) => {
-          ws[addr] = ws[addr] ? {...ws[addr], v:val, t:t||"s", f:undefined} : {v:val, t:t||"s"};
+          ws[addr] = ws[addr] ? {...ws[addr], v:val, t:t||"s", f:undefined, s:{...dS,...(ws[addr].s||{})}} : {v:val, t:t||"s", s:dS};
         };
         const setFormula = (addr, f) => {
-          ws[addr] = ws[addr] ? {...ws[addr], v:0, t:"n", f} : {v:0, t:"n", f};
+          ws[addr] = ws[addr] ? {...ws[addr], v:0, t:"n", f, s:{...dS,...(ws[addr].s||{})}} : {v:0, t:"n", f, s:dS};
         };
 
         groups.forEach((g, idx) => {
@@ -1899,7 +1900,8 @@ function AdminDash({ records, vehicles, setVehicles, mappings, setMappings, onSa
         const detailRows = [];
         groups.forEach(g => {
           const groupRows = rows.filter(r => {
-            const isM3 = r.work?.unit==="㎥"||r.work?.unit==="m³";
+            const M3_LIST = ["모래","13mm","25mm","40mm","혼합","석분"];
+            const isM3 = M3_LIST.includes(r.work?.material) || (r.work?.unit==="㎥"||r.work?.unit==="m³");
             return r.from===g.from && r.to===g.to && r.work?.material===g.mat && isM3===g.isM3;
           }).sort((a,b) => {
             const dCmp = (a.date||"").localeCompare(b.date||"");
@@ -1909,26 +1911,28 @@ function AdminDash({ records, vehicles, setVehicles, mappings, setMappings, onSa
           detailRows.push(...groupRows);
         });
         // 현장별 소계 행 포함해서 작성
+        const M3_LIST_D = ["모래","13mm","25mm","40mm","혼합","석분"];
+        const isM3byMat = (mat, unit) => M3_LIST_D.includes(mat) || unit==="㎥" || unit==="m³";
         let detailRowIdx = 47;
         groups.forEach(g => {
           const groupRows = detailRows.filter(r => {
-            const isM3 = r.work?.unit==="㎥"||r.work?.unit==="m³";
-            return r.from===g.from && r.to===g.to && r.work?.material===g.mat && isM3===g.isM3;
+            const rm3 = isM3byMat(r.work?.material, r.work?.unit);
+            return r.from===g.from && r.to===g.to && r.work?.material===g.mat && rm3===g.isM3;
           });
           // 데이터 행
           groupRows.forEach(row => {
             const ri = detailRowIdx;
             const day = row.date ? (parseInt(row.date.split("-")[1])+"."+parseInt(row.date.split("-")[2])) : "";
-            const M3_LIST = ["모래","13mm","25mm","40mm","혼합","석분"];
-            const isM3 = M3_LIST.includes(row.work?.material) || row.work?.unit==="㎥"||row.work?.unit==="m³";
+            const isM3 = isM3byMat(row.work?.material, row.work?.unit);
             const qty = Number(row.work?.qty)||0;
             setCell("C"+ri, day||"", "s");
             setCell("D"+ri, row.vehicle||"");
             setCell("E"+ri, row.from||"");
             setCell("F"+ri, row.to||"");
             setCell("G"+ri, row.work?.material||"");
-            if (!isM3) setCell("H"+ri, qty, "n");
-            else setCell("I"+ri, qty, "n");
+            // 수량/㎥ 둘 중 하나만 입력 (품목 기준으로 판단)
+            if (!isM3) { setCell("H"+ri, qty, "n"); setCell("I"+ri, "", "s"); }
+            else { setCell("I"+ri, qty, "n"); setCell("H"+ri, "", "s"); }
             detailRowIdx++;
           });
           // 소계 행 (노란색) - 수량/m3 숫자만
@@ -1978,12 +1982,12 @@ function AdminDash({ records, vehicles, setVehicles, mappings, setMappings, onSa
     const thin = { style: "thin", color: { rgb: "000000" } };
     const bdr = { top: thin, bottom: thin, left: thin, right: thin };
     const SB = (bold, align, sz) => ({
-      font: { name: "맑은 고딕", bold: !!bold, sz: sz || 10 },
+      font: { name: "돋움", bold: !!bold, sz: sz || 10 },
       alignment: { horizontal: align || "left", vertical: "center" },
       border: bdr,
     });
     const S = (bold, align, sz) => ({
-      font: { name: "맑은 고딕", bold: !!bold, sz: sz || 10 },
+      font: { name: "돋움", bold: !!bold, sz: sz || 10 },
       alignment: { horizontal: align || "left", vertical: "center" },
     });
     const C2 = (ws, addr, val, style) => { ws[addr] = { v: val, t: typeof val === "number" ? "n" : "s", s: style }; };
