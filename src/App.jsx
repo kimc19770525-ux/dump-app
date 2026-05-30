@@ -23,7 +23,7 @@ const DEFAULT_VEHICLES = [
   "7785","7799","8367","8627","9145","9451"
 ];
 
-const MATERIALS = ["토사","뻘","불량토","마사","풍암","원석","선별암","모래","A","B","C","13mm","25mm","40mm","혼합","석분"];
+const MATERIALS = ["토사","뻘","불량토","마사","풍암","원석","선별암","와라","모래","A","B","C","13mm","25mm","40mm","혼합","석분"];
 const UNITS = ["개","m³","톤"];
 const ADMIN_PW = "121512";
 const MATERIAL_COLORS = {
@@ -410,7 +410,7 @@ function ReportForm({ vehicles, locationHints, locations, records, onSave }) {
   };
 
   // 품목 선택 상태 (행별)
-  const MATERIALS = ["토사","뻘","불량토","마사","풍암","원석","선별암","모래","A","B","C","13mm","25mm","40mm","혼합","석분"];
+  const MATERIALS = ["토사","뻘","불량토","마사","풍암","원석","선별암","와라","모래","A","B","C","13mm","25mm","40mm","혼합","석분"];
   const M3_MATS = ["모래","13mm","25mm","40mm","혼합","석분"];
 
   const setMaterial = (i, m) => {
