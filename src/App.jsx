@@ -1637,11 +1637,12 @@ function PriceInputModal({ records, customPrices, setCustomPrices, onClose, onCo
 }
 
 function AdminDash({ records, vehicles, setVehicles, mappings, setMappings, onSaveMappings, prices, setPrices, locations, setLocations, driverSettings, setDriverSettings, adminPw, setAdminPw, onLock, onSaveExpense, onRefresh }) {
-  const [period, setPeriod]         = useState("mid");
+  const _today = new Date(); const _ty = _today.getFullYear(), _tm = String(_today.getMonth()+1).padStart(2,"0"), _td = String(_today.getDate()).padStart(2,"0"); const _todayStr = `${_ty}-${_tm}-${_td}`;
+  const [period, setPeriod]         = useState("custom");
   const [showPriceModal, setShowPriceModal] = useState(false);
   const [customPrices, setCustomPrices]     = useState({});
-  const [customStart, setCustomStart] = useState("");
-  const [customEnd, setCustomEnd]   = useState("");
+  const [customStart, setCustomStart] = useState(_todayStr);
+  const [customEnd, setCustomEnd]   = useState(_todayStr);
   const [adminTab, setAdminTab]     = useState("report");
   const [newVehicle, setNewVehicle] = useState("");
   const [newPw, setNewPw]           = useState("");
