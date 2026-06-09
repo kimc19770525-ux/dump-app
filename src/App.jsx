@@ -1592,14 +1592,9 @@ function DriverScreen({ vehicles, locationHints, locations, records, onSave, onR
 // ════════════════════════════════════════════════════════════
 // 관리자 대시보드
 // ════════════════════════════════════════════════════════════
-function PriceInputModal({ records, customPrices, setCustomPrices, onClose, onConfirm }) {
-  const now = new Date();
-  const y = now.getFullYear(), mo = now.getMonth();
-  const vStart = new Date(y, mo, 1).toISOString().slice(0,10);
-  const vEnd   = new Date(y, mo+1, 0).toISOString().slice(0,10);
-  const periodRecs = records.filter(r => r.type==="report" && r.date>=vStart && r.date<=vEnd && r.status!=="pending");
+function PriceInputModal({ reportRecs, customPrices, setCustomPrices, onClose, onConfirm }) {
   const locSet = {};
-  periodRecs.forEach(r => {
+  reportRecs.forEach(r => {
     const k = (r.from||"")+"||"+(r.to||"");
     if (!locSet[k]) locSet[k] = { from:r.from, to:r.to };
   });
@@ -2298,7 +2293,19 @@ function AdminDash({ records, vehicles, setVehicles, mappings, setMappings, onSa
             <Btn onClick={downloadAll} style={{ flex: 1 }} disabled={reportRecs.length === 0}>📥 전체CSV</Btn>
             <Btn onClick={() => downloadByClient("mid")} color={C.blue} style={{ flex: 1 }} disabled={reportRecs.length === 0}>📤 25일마감</Btn>
             <Btn onClick={() => downloadByClient("end")} color={C.blue} style={{ flex: 1 }} disabled={reportRecs.length === 0}>📤 말일마감</Btn>
-            <Btn onClick={() => setShowPriceModal(true)} color={C.purple} style={{ flex: 1 }} disabled={reportRecs.length === 0}>🚛 기사별 정산</Btn>
+            <Btn onClick={() => {
+              // 저장된 단가를 기본값으로 채워서 모달 열기
+              const prefilled = {};
+              reportRecs.forEach(r => {
+                const k = (r.from||"")+"||"+(r.to||"");
+                if (!prefilled[k]) {
+                  const saved = prices[k] || prices[(r.from||"")+"||"] || 0;
+                  if (saved) prefilled[k] = saved;
+                }
+              });
+              setCustomPrices(prefilled);
+              setShowPriceModal(true);
+            }} color={C.purple} style={{ flex: 1 }} disabled={reportRecs.length === 0}>🚛 기사별 정산</Btn>
           </div>
 
           {Object.entries(byClient).length === 0 ? (
@@ -2418,7 +2425,7 @@ function AdminDash({ records, vehicles, setVehicles, mappings, setMappings, onSa
     </div>
     {/* 기사별 정산 단가 입력 모달 */}
     {showPriceModal && <PriceInputModal
-      records={records}
+      reportRecs={reportRecs}
       customPrices={customPrices}
       setCustomPrices={setCustomPrices}
       onClose={()=>setShowPriceModal(false)}
