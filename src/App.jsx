@@ -1781,13 +1781,18 @@ function AdminDash({ records, vehicles, setVehicles, mappings, setMappings, onSa
   const downloadByClient = (closingType) => {
     // XLSX는 상단 import로 로드됨
 
-    const now = new Date();
-    const y = now.getFullYear(), m = now.getMonth();
     let sD, eD;
-    if (closingType === "mid") {
-      sD = localDate(y, m - 1, 26); eD = localDate(y, m, 25);
+    if (closingType === "custom") {
+      // 관리자 화면에서 직접 설정한 날짜 사용
+      [sD, eD] = getPeriodRange();
     } else {
-      sD = localDate(y, m, 1); eD = localDate(y, m + 1, 0);
+      const now = new Date();
+      const y = now.getFullYear(), m = now.getMonth();
+      if (closingType === "mid") {
+        sD = localDate(y, m - 1, 26); eD = localDate(y, m, 25);
+      } else {
+        sD = localDate(y, m, 1); eD = localDate(y, m + 1, 0);
+      }
     }
 
     const inR = r => r.date && r.date.match(/^\d{4}-\d{2}-\d{2}$/) && r.date >= sD && r.date <= eD;
@@ -1972,7 +1977,7 @@ function AdminDash({ records, vehicles, setVehicles, mappings, setMappings, onSa
 
     // 기사정산: 관리자 화면에서 설정한 날짜 범위 사용
     const [vStartD, vEndD] = getPeriodRange();
-    const inVRange = r => r.date && r.date >= vStartD && r.date <= vEndD;
+    const inVRange = r => r.date && r.date.match(/^\d{4}-\d{2}-\d{2}$/) && r.date >= vStartD && r.date <= vEndD;
     const vReportRecs = records.filter(r => r.type === "report" && inVRange(r) && r.status !== "pending");
 
     const byVehicle = {};
@@ -2429,7 +2434,15 @@ function AdminDash({ records, vehicles, setVehicles, mappings, setMappings, onSa
       customPrices={customPrices}
       setCustomPrices={setCustomPrices}
       onClose={()=>setShowPriceModal(false)}
-      onConfirm={()=>{ const p = {...customPrices}; setShowPriceModal(false); setTimeout(()=>downloadByVehicle(p), 100); }}
+      onConfirm={()=>{
+        const p = {...customPrices};
+        // 입력한 단가를 prices에 병합해서 저장 (다음번에 자동으로 채워짐)
+        if (Object.keys(p).length > 0) {
+          updatePrices(prev => ({ ...prev, ...p }));
+        }
+        setShowPriceModal(false);
+        setTimeout(()=>downloadByVehicle(p), 100);
+      }}
     />}
     </>
   );
