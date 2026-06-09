@@ -1976,8 +1976,7 @@ function AdminDash({ records, vehicles, setVehicles, mappings, setMappings, onSa
     // XLSX imported
 
     // 기사정산: 관리자 화면에서 설정한 날짜 범위 사용
-    const vStartD = startD;
-    const vEndD   = endD;
+    const [vStartD, vEndD] = getPeriodRange();
     const inVRange = r => r.date && r.date >= vStartD && r.date <= vEndD;
     const vReportRecs = records.filter(r => r.type === "report" && inVRange(r) && r.status !== "pending");
 
@@ -2055,7 +2054,7 @@ function AdminDash({ records, vehicles, setVehicles, mappings, setMappings, onSa
       // 합계행
       const totalRow = sortedV.length + 2;
       C2(ws1, `A${totalRow}`, "", SB(false));
-      ws1[`B${totalRow}`] = { v: nowV.getMonth() + 1, t: "n", s: SB(false) };
+      ws1[`B${totalRow}`] = { v: vStartD, t: "s", s: SB(false) };
       C2(ws1, `D${totalRow}`, Number(vehicle) || vehicle, SB(false));
       CF(ws1, `L${totalRow}`, `SUM(L2:L${totalRow - 1})`, SB(true, "right"));
 
