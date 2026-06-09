@@ -1974,18 +1974,16 @@ function AdminDash({ records, vehicles, setVehicles, mappings, setMappings, onSa
   // ── 기사별 정산서 xlsx — 5623/6821/6957 양식 그대로 ──────────
   const downloadByVehicle = (customPrices = {}) => {
     // XLSX imported
-    
 
-    // 가사정산: 항상 당월 1일 ~ 당월 말일
-    const nowV = new Date();
-    const vStartD = localDate(nowV.getFullYear(), nowV.getMonth(), 1);
-    const vEndD   = localDate(nowV.getFullYear(), nowV.getMonth() + 1, 0);
-    const inVRange = r => r.date >= vStartD && r.date <= vEndD;
+    // 기사정산: 관리자 화면에서 설정한 날짜 범위 사용
+    const vStartD = startD;
+    const vEndD   = endD;
+    const inVRange = r => r.date && r.date >= vStartD && r.date <= vEndD;
     const vReportRecs = records.filter(r => r.type === "report" && inVRange(r) && r.status !== "pending");
 
     const byVehicle = {};
     vReportRecs.forEach(r => { if (!byVehicle[r.vehicle]) byVehicle[r.vehicle] = []; byVehicle[r.vehicle].push(r); });
-    if (Object.keys(byVehicle).length === 0) { alert("정산할 일보가 없습니다."); return; }
+    if (Object.keys(byVehicle).length === 0) { alert("정산할 일보가 없습니다.\n날짜 범위를 확인해주세요."); return; }
 
     const thin = { style: "thin", color: { rgb: "000000" } };
     const bdr = { top: thin, bottom: thin, left: thin, right: thin };
@@ -2002,7 +2000,7 @@ function AdminDash({ records, vehicles, setVehicles, mappings, setMappings, onSa
     const CF = (ws, addr, formula, style) => { ws[addr] = { f: formula, t: "n", s: style }; };
 
     const wb = XLSX.utils.book_new();
-    const monthStr = `${nowV.getFullYear()}년 ${nowV.getMonth() + 1}월`;
+    const monthStr = `${vStartD} ~ ${vEndD}`;
 
     Object.entries(byVehicle).forEach(([vehicle, rows]) => {
       // ── 시트1: 작업내역
