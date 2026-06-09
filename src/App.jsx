@@ -2437,9 +2437,11 @@ function AdminDash({ records, vehicles, setVehicles, mappings, setMappings, onSa
       onConfirm={()=>{
         const p = {...customPrices};
         // 입력한 단가를 prices에 병합해서 저장 (다음번에 자동으로 채워짐)
-        if (Object.keys(p).length > 0) {
-          updatePrices(prev => ({ ...prev, ...p }));
-        }
+        try {
+          if (Object.keys(p).length > 0) {
+            updatePrices(prev => ({ ...prev, ...p }));
+          }
+        } catch(e) { console.warn("단가 저장 실패:", e); }
         setShowPriceModal(false);
         setTimeout(()=>downloadByVehicle(p), 100);
       }}
