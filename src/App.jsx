@@ -361,12 +361,13 @@ function ReportForm({ vehicles, locationHints, locations, records, onSave }) {
     });
   };
 
-  // 상·하차지 목록: locations 스토리지 + 일보 기록 합산
-  // 상차지: locations.from + 일보의 from만
+  // 상·하차지 목록: locations 스토리지 + 일보 기록 합산 (제외목록 반영)
   const fromHints = records ? records.filter(r=>r.type==="report"&&r.from).map(r=>r.from) : [];
   const toHints   = records ? records.filter(r=>r.type==="report"&&r.to).map(r=>r.to)     : [];
-  const fromList  = [...new Set([...(locations?.from||[]), ...fromHints])].sort();
-  const toList    = [...new Set([...(locations?.to  ||[]), ...toHints  ])].sort();
+  const exFrom = locations?.from_excluded || [];
+  const exTo   = locations?.to_excluded   || [];
+  const fromList  = [...new Set([...(locations?.from||[]), ...fromHints])].filter(x => !exFrom.includes(x)).sort();
+  const toList    = [...new Set([...(locations?.to  ||[]), ...toHints  ])].filter(x => !exTo.includes(x)).sort();
 
   const addTrip = () => {
     if (trips.length >= 10) return;
@@ -1090,6 +1091,64 @@ function ClosingTab({ records, closings, onClose, onRefresh, getClients, getPric
 
   const isClosed = (ym) => closedMonths.includes(ym);
 
+  const downloadClosingExcel = (ym) => {
+    const recs = records.filter(r => r.type === "report" && r.date && r.date.startsWith(ym));
+    if (!recs.length) { alert("일보가 없습니다."); return; }
+
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.aoa_to_sheet([
+      ["날짜", "차량번호", "상차지", "하차지", "품명", "수량", "단위"],
+      ...recs.slice().sort((a,b)=>a.date.localeCompare(b.date)).map(r => [
+        r.date, r.vehicle, r.from, r.to,
+        r.work?.material||"", r.work?.qty||"", r.work?.unit||""
+      ])
+    ]);
+
+    // 컬럼 너비
+    ws["!cols"] = [
+      {wch:12},{wch:12},{wch:20},{wch:20},{wch:10},{wch:8},{wch:6}
+    ];
+
+    // 헤더 스타일
+    const headerStyle = { font:{name:"돋움",sz:10,bold:true}, fill:{fgColor:{rgb:"2D2D2D"}}, alignment:{horizontal:"center",vertical:"center"} };
+    const cellStyle   = { font:{name:"돋움",sz:10}, alignment:{vertical:"center"} };
+    ["A1","B1","C1","D1","E1","F1","G1"].forEach(addr => {
+      if (ws[addr]) ws[addr].s = headerStyle;
+    });
+    const range = XLSX.utils.decode_range(ws["!ref"]);
+    for (let R = 1; R <= range.e.r; R++) {
+      for (let C2 = 0; C2 <= range.e.c; C2++) {
+        const addr = XLSX.utils.encode_cell({r:R, c:C2});
+        if (ws[addr]) ws[addr].s = cellStyle;
+      }
+    }
+
+    XLSX.utils.book_append_sheet(wb, ws, ym);
+
+    // 업체별 시트 추가
+    const byCl = {};
+    recs.forEach(r => {
+      const clients = getClients(r);
+      const targets = clients.length > 0 ? clients : ["(미매핑)"];
+      targets.forEach(c => { if (!byCl[c]) byCl[c] = []; byCl[c].push(r); });
+    });
+    Object.entries(byCl).forEach(([client, rows]) => {
+      const ws2 = XLSX.utils.aoa_to_sheet([
+        ["날짜","차량번호","상차지","하차지","품명","수량","단위","단가","금액"],
+        ...rows.slice().sort((a,b)=>a.date.localeCompare(b.date)).map(r => {
+          const p = getPrice(r.from, r.to, r.work?.material) || "";
+          const q = r.work?.qty || 0;
+          const amt = p && q ? p * q : "";
+          return [r.date, r.vehicle, r.from, r.to, r.work?.material||"", q, r.work?.unit||"", p, amt];
+        })
+      ]);
+      ws2["!cols"] = [{wch:12},{wch:12},{wch:20},{wch:20},{wch:10},{wch:8},{wch:6},{wch:10},{wch:12}];
+      XLSX.utils.book_append_sheet(wb, ws2, client.slice(0,31));
+    });
+
+    XLSX.writeFile(wb, `백업_${ym}.xlsx`);
+  };
+
   return (
     <div style={{ padding: "0 0 20px" }}>
       {/* 월 선택 */}
@@ -1119,6 +1178,10 @@ function ClosingTab({ records, closings, onClose, onRefresh, getClients, getPric
                   }}>
                     {viewMonth === ym ? "닫기" : "조회"}
                   </button>
+                  <button onClick={() => downloadClosingExcel(ym)} style={{
+                    background: C.blue, border: "none", borderRadius: 8,
+                    padding: "6px 12px", color: "#fff", fontSize: 12, fontWeight: 700, cursor: "pointer"
+                  }}>📥 엑셀</button>
                   {!isClosed(ym) && (
                     <button onClick={() => onClose(ym)} style={{
                       background: C.green, border: "none", borderRadius: 8,
@@ -1592,6 +1655,95 @@ function DriverScreen({ vehicles, locationHints, locations, records, onSave, onR
 // ════════════════════════════════════════════════════════════
 // 관리자 대시보드
 // ════════════════════════════════════════════════════════════
+// ════════════════════════════════════════════════════════════
+// 관리자 일보 직접 추가 모달
+// ════════════════════════════════════════════════════════════
+function AdminAddModal({ vehicles, locations, onClose, onAdd }) {
+  const MATERIALS = ["토사","뻘","불량토","와라","마사","풍암","원석","선별암","모래","A","B","C","13mm","25mm","40mm","혼합","석분"];
+  const [date, setDate] = React.useState(() => new Date().toISOString().slice(0,10));
+  const [vehicle, setVehicle] = React.useState("");
+  const [from, setFrom] = React.useState("");
+  const [fromDirect, setFromDirect] = React.useState("");
+  const [to, setTo] = React.useState("");
+  const [toDirect, setToDirect] = React.useState("");
+  const [material, setMaterial] = React.useState("토사");
+  const [qty, setQty] = React.useState("");
+
+  const M3_LIST = ["모래","13mm","25mm","40mm","혼합","석분"];
+  const isM3 = M3_LIST.includes(material);
+  const allLocs = [...new Set(locations)].sort();
+
+  const actualFrom = from === "__direct__" ? fromDirect : from;
+  const actualTo   = to   === "__direct__" ? toDirect   : to;
+
+  const handleAdd = () => {
+    if (!date || !vehicle || !actualFrom || !actualTo || !qty) {
+      alert("날짜, 차량, 상차지, 하차지, 수량을 모두 입력해주세요."); return;
+    }
+    const rec = {
+      id: "admin_" + Date.now(),
+      type: "report",
+      status: "approved",
+      date,
+      vehicle,
+      from: actualFrom,
+      to: actualTo,
+      work: { material, qty: Number(qty), unit: isM3 ? "㎥" : "개" },
+      submittedAt: new Date().toISOString(),
+    };
+    onAdd(rec);
+  };
+
+  const inp = { width: "100%", padding: "10px 12px", borderRadius: 8, border: `1px solid ${C.border}`, background: C.card, color: C.text, fontSize: 14, boxSizing: "border-box" };
+  const lbl = { fontSize: 12, color: C.muted, marginBottom: 4, marginTop: 10 };
+
+  return (
+    <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.7)", zIndex:1000, display:"flex", alignItems:"center", justifyContent:"center", padding:16 }}>
+      <div style={{ background: C.card, borderRadius: 16, padding: 20, width: "100%", maxWidth: 400, maxHeight: "90vh", overflowY: "auto" }}>
+        <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 14, color: C.text }}>📝 일보 직접 추가</div>
+
+        <div style={lbl}>날짜</div>
+        <input type="date" value={date} onChange={e=>setDate(e.target.value)} style={inp} />
+
+        <div style={lbl}>차량번호</div>
+        <select value={vehicle} onChange={e=>setVehicle(e.target.value)} style={inp}>
+          <option value="">선택</option>
+          {vehicles.map(v => <option key={v} value={v}>{v}</option>)}
+        </select>
+
+        <div style={lbl}>상차지</div>
+        <select value={from} onChange={e=>setFrom(e.target.value)} style={inp}>
+          <option value="">선택</option>
+          <option value="__direct__">✏️ 직접입력...</option>
+          {allLocs.map(l => <option key={l} value={l}>{l}</option>)}
+        </select>
+        {from === "__direct__" && <input placeholder="상차지 직접입력" value={fromDirect} onChange={e=>setFromDirect(e.target.value)} style={{...inp, marginTop:6}} />}
+
+        <div style={lbl}>하차지</div>
+        <select value={to} onChange={e=>setTo(e.target.value)} style={inp}>
+          <option value="">선택</option>
+          <option value="__direct__">✏️ 직접입력...</option>
+          {allLocs.map(l => <option key={l} value={l}>{l}</option>)}
+        </select>
+        {to === "__direct__" && <input placeholder="하차지 직접입력" value={toDirect} onChange={e=>setToDirect(e.target.value)} style={{...inp, marginTop:6}} />}
+
+        <div style={lbl}>품명</div>
+        <select value={material} onChange={e=>setMaterial(e.target.value)} style={inp}>
+          {MATERIALS.map(m => <option key={m} value={m}>{m}</option>)}
+        </select>
+
+        <div style={lbl}>{isM3 ? "수량 (㎥)" : "수량 (개)"}</div>
+        <input type="number" value={qty} onChange={e=>setQty(e.target.value)} placeholder="수량 입력" style={inp} />
+
+        <div style={{ display:"flex", gap:8, marginTop:16 }}>
+          <button onClick={onClose} style={{ flex:1, padding:12, borderRadius:10, background:C.border, border:"none", color:C.text, fontSize:14, cursor:"pointer" }}>취소</button>
+          <button onClick={handleAdd} style={{ flex:2, padding:12, borderRadius:10, background:C.green, border:"none", color:"#fff", fontSize:14, fontWeight:700, cursor:"pointer" }}>✅ 추가</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function PriceInputModal({ reportRecs, customPrices, setCustomPrices, onClose, onConfirm }) {
   const locSet = {};
   reportRecs.forEach(r => {
@@ -1635,6 +1787,7 @@ function AdminDash({ records, vehicles, setVehicles, mappings, setMappings, onSa
   const _today = new Date(); const _ty = _today.getFullYear(), _tm = String(_today.getMonth()+1).padStart(2,"0"), _td = String(_today.getDate()).padStart(2,"0"); const _todayStr = `${_ty}-${_tm}-${_td}`;
   const [period, setPeriod]         = useState("custom");
   const [showPriceModal, setShowPriceModal] = useState(false);
+  const [showAddModal, setShowAddModal] = useState(false);
   const [customPrices, setCustomPrices]     = useState({});
   const [customStart, setCustomStart] = useState(_todayStr);
   const [customEnd, setCustomEnd]   = useState(_todayStr);
@@ -2295,6 +2448,7 @@ function AdminDash({ records, vehicles, setVehicles, mappings, setMappings, onSa
           </div>
 
           <div style={{ display: "flex", gap: 8, marginBottom: 14, flexWrap: "wrap" }}>
+            <Btn onClick={() => setShowAddModal(true)} color={C.green} style={{ flex: 1 }}>➕ 일보추가</Btn>
             <Btn onClick={downloadAll} style={{ flex: 1 }} disabled={reportRecs.length === 0}>📥 전체CSV</Btn>
             <Btn onClick={() => downloadByClient("mid")} color={C.blue} style={{ flex: 1 }} disabled={reportRecs.length === 0}>📤 25일마감</Btn>
             <Btn onClick={() => downloadByClient("end")} color={C.blue} style={{ flex: 1 }} disabled={reportRecs.length === 0}>📤 말일마감</Btn>
@@ -2428,6 +2582,22 @@ function AdminDash({ records, vehicles, setVehicles, mappings, setMappings, onSa
         </>
       )}
     </div>
+    {/* 관리자 일보 직접 추가 모달 */}
+    {showAddModal && <AdminAddModal
+      vehicles={vehicles}
+      locations={locations}
+      onClose={() => setShowAddModal(false)}
+      onAdd={async (rec) => {
+        try {
+          await window.sbRecords.upsert(rec);
+          await onRefresh();
+          setShowAddModal(false);
+          alert("일보가 추가됐습니다.");
+        } catch(e) {
+          alert("저장 실패: " + e.message);
+        }
+      }}
+    />}
     {/* 기사별 정산 단가 입력 모달 */}
     {showPriceModal && <PriceInputModal
       reportRecs={reportRecs}
@@ -2436,14 +2606,19 @@ function AdminDash({ records, vehicles, setVehicles, mappings, setMappings, onSa
       onClose={()=>setShowPriceModal(false)}
       onConfirm={()=>{
         const p = {...customPrices};
-        // 입력한 단가를 prices에 병합해서 저장 (다음번에 자동으로 채워짐)
         try {
           if (Object.keys(p).length > 0) {
             updatePrices(prev => ({ ...prev, ...p }));
           }
         } catch(e) { console.warn("단가 저장 실패:", e); }
         setShowPriceModal(false);
-        setTimeout(()=>downloadByVehicle(p), 100);
+        setTimeout(()=>{
+          try {
+            downloadByVehicle(p);
+          } catch(e) {
+            alert("오류: " + e.message);
+          }
+        }, 100);
       }}
     />}
     </>
