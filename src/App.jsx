@@ -1288,12 +1288,14 @@ function LocManagePanel({ locations, setLocations, records, onBulkRename }) {
   };
 
   const removeLoc = (type, loc) => {
-    // locations 스토리지에서 삭제 + 제외목록에 추가
-    setLocations(prev => ({
-      ...prev,
-      [type]: (prev[type]||[]).filter(x => x !== loc),
-      [type+"_excluded"]: [...(prev[type+"_excluded"]||[]), loc]
-    }));
+    setLocations(prev => {
+      const excluded = [...new Set([...(prev[type+"_excluded"]||[]), loc])];
+      return {
+        ...prev,
+        [type]: (prev[type]||[]).filter(x => x !== loc),
+        [type+"_excluded"]: excluded
+      };
+    });
   };
 
   return (
@@ -1493,10 +1495,10 @@ function PendingReports({ records, onRefresh }) {
                           date: e.date,
                           from: e.from,
                           to: e.to,
-                          work: { ...r.work, material: e.material, qty: e.qty, unit: e.unit }
+                          work: { ...r.work, material: e.material, qty: Number(e.qty), unit: e.unit }
                         };
                         try {
-                          await window.sbRecords.update(updated);
+                          await window.sbRecords.upsert(updated);
                           setEditMap(prev => { const n={...prev}; delete n[r.id]; return n; });
                           onRefresh();
                         } catch(err) { alert("저장 실패: " + err); }
@@ -1512,12 +1514,13 @@ function PendingReports({ records, onRefresh }) {
                           date: e.date,
                           from: e.from,
                           to: e.to,
-                          work: { ...r.work, material: e.material, qty: e.qty, unit: e.unit }
+                          work: { ...r.work, material: e.material, qty: Number(e.qty), unit: e.unit }
                         };
                         try {
-                          await window.sbRecords.update(updated);
+                          await window.sbRecords.upsert(updated);
                           setApprovedIds(prev => new Set([...prev, r.id]));
                           setEditMap(prev => { const n={...prev}; delete n[r.id]; return n; });
+                          onRefresh();
                         } catch(err) { alert("저장 실패: " + err); }
                       }} style={{
                         background:C.green, border:"none", borderRadius:8, padding:"6px 14px",
@@ -1671,7 +1674,10 @@ function AdminAddModal({ vehicles, locations, onClose, onAdd }) {
 
   const M3_LIST = ["모래","13mm","25mm","40mm","혼합","석분"];
   const isM3 = M3_LIST.includes(material);
-  const allLocs = [...new Set(locations)].sort();
+  const exFrom = locations?.from_excluded || [];
+  const exTo   = locations?.to_excluded   || [];
+  const allFrom = [...new Set([...(locations?.from||[])])].filter(x => !exFrom.includes(x)).sort();
+  const allTo   = [...new Set([...(locations?.to||[])])].filter(x => !exTo.includes(x)).sort();
 
   const actualFrom = from === "__direct__" ? fromDirect : from;
   const actualTo   = to   === "__direct__" ? toDirect   : to;
@@ -1715,7 +1721,7 @@ function AdminAddModal({ vehicles, locations, onClose, onAdd }) {
         <select value={from} onChange={e=>setFrom(e.target.value)} style={inp}>
           <option value="">선택</option>
           <option value="__direct__">✏️ 직접입력...</option>
-          {allLocs.map(l => <option key={l} value={l}>{l}</option>)}
+          {allFrom.map(l => <option key={l} value={l}>{l}</option>)}
         </select>
         {from === "__direct__" && <input placeholder="상차지 직접입력" value={fromDirect} onChange={e=>setFromDirect(e.target.value)} style={{...inp, marginTop:6}} />}
 
@@ -1723,7 +1729,7 @@ function AdminAddModal({ vehicles, locations, onClose, onAdd }) {
         <select value={to} onChange={e=>setTo(e.target.value)} style={inp}>
           <option value="">선택</option>
           <option value="__direct__">✏️ 직접입력...</option>
-          {allLocs.map(l => <option key={l} value={l}>{l}</option>)}
+          {allTo.map(l => <option key={l} value={l}>{l}</option>)}
         </select>
         {to === "__direct__" && <input placeholder="하차지 직접입력" value={toDirect} onChange={e=>setToDirect(e.target.value)} style={{...inp, marginTop:6}} />}
 
@@ -2724,7 +2730,11 @@ export default function App() {
   };
 
   const updateLocations = fn => {
-    setLocationsState(prev => { const next = typeof fn === "function" ? fn(prev) : fn; window.storage.set("dump_locations", JSON.stringify(next)).catch(()=>{}); return next; });
+    setLocationsState(prev => {
+      const next = typeof fn === "function" ? fn(prev) : fn;
+      window.storage.set("dump_locations", JSON.stringify(next)).catch(e => console.error("위치 저장 실패:", e));
+      return next;
+    });
   };
 
   const updateDriverSettings = fn => {
