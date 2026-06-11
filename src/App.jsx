@@ -2595,7 +2595,7 @@ function AdminDash({ records, vehicles, setVehicles, mappings, setMappings, onSa
       onClose={() => setShowAddModal(false)}
       onAdd={async (rec) => {
         try {
-          await window.sbRecords.upsert(rec);
+          await onSaveExpense(rec);
           await onRefresh();
           setShowAddModal(false);
           alert("일보가 추가됐습니다.");
@@ -2710,13 +2710,34 @@ export default function App() {
     setRecords(prev => [...prev, rec]);
     await window.sbRecords.upsert(rec);
     // 상·하차지 자동 목록 추가
+    // - 새 현장이면 추가
+    // - 예전에 삭제(제외)했던 현장을 다시 직접입력했다면 제외목록에서 빼고 재등록
     if (rec.type === "report") {
       setLocationsState(prev => {
-        const newFrom = rec.from && !prev.from?.includes(rec.from)
-          ? { ...prev, from: [...(prev.from||[]), rec.from] } : prev;
-        const next = rec.to && !newFrom.to?.includes(rec.to)
-          ? { ...newFrom, to: [...(newFrom.to||[]), rec.to] } : newFrom;
-        if (next !== prev) window.storage.set("dump_locations", JSON.stringify(next)).catch(()=>{});
+        let next = prev;
+        if (rec.from) {
+          const exFrom = (next.from_excluded || []).filter(x => x !== rec.from);
+          if (!next.from?.includes(rec.from)) {
+            next = { ...next, from: [...(next.from||[]), rec.from], from_excluded: exFrom };
+          } else if (exFrom.length !== (next.from_excluded||[]).length) {
+            next = { ...next, from_excluded: exFrom };
+          }
+        }
+        if (rec.to) {
+          const exTo = (next.to_excluded || []).filter(x => x !== rec.to);
+          if (!next.to?.includes(rec.to)) {
+            next = { ...next, to: [...(next.to||[]), rec.to], to_excluded: exTo };
+          } else if (exTo.length !== (next.to_excluded||[]).length) {
+            next = { ...next, to_excluded: exTo };
+          }
+        }
+        if (next !== prev) {
+          window.storage.set("dump_locations", JSON.stringify(next)).catch(()=>{});
+          window.sbRecords.upsert({
+            id: "loc_excluded_v1", type: "loc_excluded",
+            data: { from_excluded: next.from_excluded || [], to_excluded: next.to_excluded || [] }
+          }).catch(()=>{});
+        }
         return next;
       });
     }
