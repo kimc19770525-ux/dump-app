@@ -2669,19 +2669,18 @@ export default function App() {
       setLoading(true);
       try { const v = await window.storage.get("dump_vehicles"); if (v?.value) setVehicles(JSON.parse(v.value)); } catch {}
       // 상·하차지 목록은 기사/관리자 모두 불러옴
-      try { const l = await window.storage.get("dump_locations"); if (l?.value) setLocationsState(JSON.parse(l.value)); } catch {}
-      // Supabase에서 excluded 목록 불러오기 (삭제한 상하차지 영구 보존)
       try {
-        const exRec = await window.sbRecords.getAll();
-        const exData = exRec.find(r => r.type === "loc_excluded");
-        if (exData?.data) {
-          setLocationsState(prev => ({
-            ...prev,
-            from_excluded: exData.data.from_excluded || [],
-            to_excluded:   exData.data.to_excluded   || [],
-          }));
+        const l = await window.storage.get("dump_locations");
+        if (l?.value) {
+          const parsed = JSON.parse(l.value);
+          setLocationsState({
+            from: parsed.from || [],
+            to: parsed.to || [],
+            from_excluded: parsed.from_excluded || [],
+            to_excluded: parsed.to_excluded || [],
+          });
         }
-      } catch {}
+      } catch (e) { console.error("위치 로드 실패:", e); }
       // 기사 모드에서도 일보 기록 불러와서 상·하차지 목록 보완
       if (!isAdminMode) {
         try {
@@ -2733,10 +2732,6 @@ export default function App() {
         }
         if (next !== prev) {
           window.storage.set("dump_locations", JSON.stringify(next)).catch(()=>{});
-          window.sbRecords.upsert({
-            id: "loc_excluded_v1", type: "loc_excluded",
-            data: { from_excluded: next.from_excluded || [], to_excluded: next.to_excluded || [] }
-          }).catch(()=>{});
         }
         return next;
       });
@@ -2765,18 +2760,9 @@ export default function App() {
   const updateLocations = fn => {
     setLocationsState(prev => {
       const next = typeof fn === "function" ? fn(prev) : fn;
-      window.storage.set("dump_locations", JSON.stringify(next)).catch(e => console.error("위치 저장 실패:", e));
-      // excluded 목록은 Supabase에도 저장 (기기 간 공유)
-      if (next.from_excluded || next.to_excluded) {
-        window.sbRecords.upsert({
-          id: "loc_excluded_v1",
-          type: "loc_excluded",
-          data: {
-            from_excluded: next.from_excluded || [],
-            to_excluded:   next.to_excluded   || [],
-          }
-        }).catch(() => {});
-      }
+      window.storage.set("dump_locations", JSON.stringify(next))
+        .then(() => console.log("위치 저장 성공:", next))
+        .catch(e => console.error("위치 저장 실패:", e));
       return next;
     });
   };
