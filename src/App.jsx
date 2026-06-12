@@ -2686,17 +2686,22 @@ export default function App() {
       // 제외목록은 Supabase에서 로드 (앱 재시작에도 유지)
       try {
         const exRecs = await window.sbRecords.getAll();
-        const settingsRecs = exRecs.filter(r => r.type === "settings");
-        const exData = exRecs.find(r => r.type === "settings" && String(r.id) === "1");
+        const exData = exRecs.find(r => r.type === "settings" && r.vehicle === "SETTINGS");
         if (exData) {
-          setLocationsState(prev => ({
-            ...prev,
-            from_excluded: exData.from_excluded || [],
-            to_excluded: exData.to_excluded || [],
-          }));
-          alert("✅ 로드성공: " + JSON.stringify(exData.from_excluded) + " / " + JSON.stringify(exData.to_excluded));
+          try {
+            const parsed = JSON.parse(exData.work?.material || "{}");
+            setLocationsState(prev => ({
+              ...prev,
+              from_excluded: parsed.from_excluded || [],
+              to_excluded: parsed.to_excluded || [],
+            }));
+            alert("✅ 로드성공: " + JSON.stringify(parsed.from_excluded) + " / " + JSON.stringify(parsed.to_excluded));
+          } catch (e2) {
+            alert("⚠️ 파싱 실패: " + JSON.stringify(exData.work));
+          }
         } else {
-          alert("⚠️ settings 레코드 못찾음. settings 타입 개수: " + settingsRecs.length + " / 전체 id목록 일부: " + JSON.stringify(settingsRecs.map(r=>({id:r.id, idType:typeof r.id}))));
+          const allTypes = [...new Set(exRecs.map(r=>r.type))];
+          alert("⚠️ settings 못찾음. 전체 레코드 수: " + exRecs.length + " / 타입목록: " + JSON.stringify(allTypes));
         }
       } catch (e) { alert("❌ 제외목록 로드 에러: " + (e?.message || JSON.stringify(e))); }
       // 기사 모드에서도 일보 기록 불러와서 상·하차지 목록 보완
@@ -2785,23 +2790,31 @@ export default function App() {
   };
 
   const persistExcluded = (next) => {
+    // report 레코드와 완전히 동일한 필드 구조 사용 (스키마 문제 방지)
+    // 제외목록은 work.material 안에 JSON 문자열로 저장
     const payload = {
       id: 1,
       type: "settings",
+      status: "approved",
       date: today(),
-      vehicle: "",
-      from: "",
-      to: "",
-      work: { material: "", qty: 0, unit: "" },
-      status: "settings",
-      from_excluded: next.from_excluded || [],
-      to_excluded: next.to_excluded || [],
+      vehicle: "SETTINGS",
+      from: "SETTINGS",
+      to: "SETTINGS",
+      work: {
+        material: JSON.stringify({
+          from_excluded: next.from_excluded || [],
+          to_excluded: next.to_excluded || [],
+        }),
+        qty: 0,
+        unit: "개"
+      },
+      submittedAt: new Date().toISOString(),
     };
     try {
       const result = window.sbRecords.upsert(payload);
       if (result && typeof result.then === "function") {
-        result.then(() => {
-          alert("✅ 저장성공: " + JSON.stringify(payload.from_excluded) + " / " + JSON.stringify(payload.to_excluded));
+        result.then((res) => {
+          alert("✅ upsert 응답: " + JSON.stringify(res).slice(0,300));
         }).catch(e => {
           alert("❌ upsert reject: " + (e?.message || JSON.stringify(e)));
         });
