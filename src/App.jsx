@@ -2686,15 +2686,19 @@ export default function App() {
       // 제외목록은 Supabase에서 로드 (앱 재시작에도 유지)
       try {
         const exRecs = await window.sbRecords.getAll();
-        const exData = exRecs.find(r => r.type === "settings" && r.id === 1);
+        const settingsRecs = exRecs.filter(r => r.type === "settings");
+        const exData = exRecs.find(r => r.type === "settings" && String(r.id) === "1");
         if (exData) {
           setLocationsState(prev => ({
             ...prev,
             from_excluded: exData.from_excluded || [],
             to_excluded: exData.to_excluded || [],
           }));
+          alert("✅ 로드성공: " + JSON.stringify(exData.from_excluded) + " / " + JSON.stringify(exData.to_excluded));
+        } else {
+          alert("⚠️ settings 레코드 못찾음. settings 타입 개수: " + settingsRecs.length + " / 전체 id목록 일부: " + JSON.stringify(settingsRecs.map(r=>({id:r.id, idType:typeof r.id}))));
         }
-      } catch (e) { console.error("제외목록 로드 실패:", e); }
+      } catch (e) { alert("❌ 제외목록 로드 에러: " + (e?.message || JSON.stringify(e))); }
       // 기사 모드에서도 일보 기록 불러와서 상·하차지 목록 보완
       if (!isAdminMode) {
         try {
