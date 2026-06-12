@@ -2753,7 +2753,7 @@ export default function App() {
           if (next.from_excluded !== prev.from_excluded || next.to_excluded !== prev.to_excluded) {
             window.sbRecords.upsert({
               id: 1, type: "settings",
-              date: "1970-01-01", vehicle: "", from: "", to: "",
+              date: today(), vehicle: "", from: "", to: "",
               work: { material: "", qty: 0, unit: "" }, status: "settings",
               from_excluded: next.from_excluded || [],
               to_excluded: next.to_excluded || [],
@@ -2788,7 +2788,7 @@ export default function App() {
     const payload = {
       id: 1,
       type: "settings",
-      date: "1970-01-01",
+      date: today(),
       vehicle: "",
       from: "",
       to: "",
