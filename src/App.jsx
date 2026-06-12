@@ -2780,27 +2780,40 @@ export default function App() {
     setPricesState(prev => { const next = typeof fn === "function" ? fn(prev) : fn; window.storage.set("dump_prices", JSON.stringify(next)).catch(() => {}); return next; });
   };
 
+  const persistExcluded = (next) => {
+    const payload = {
+      id: 1,
+      type: "settings",
+      date: "1970-01-01",
+      vehicle: "",
+      from: "",
+      to: "",
+      work: { material: "", qty: 0, unit: "" },
+      status: "settings",
+      from_excluded: next.from_excluded || [],
+      to_excluded: next.to_excluded || [],
+    };
+    try {
+      const result = window.sbRecords.upsert(payload);
+      if (result && typeof result.then === "function") {
+        result.then(() => {
+          alert("✅ 저장성공: " + JSON.stringify(payload.from_excluded) + " / " + JSON.stringify(payload.to_excluded));
+        }).catch(e => {
+          alert("❌ upsert reject: " + (e?.message || JSON.stringify(e)));
+        });
+      } else {
+        alert("⚠️ upsert가 Promise 아님 (반환값: " + String(result) + ")");
+      }
+    } catch (e) {
+      alert("❌ upsert 호출 에러: " + (e?.message || JSON.stringify(e)));
+    }
+  };
+
   const updateLocations = fn => {
     setLocationsState(prev => {
       const next = typeof fn === "function" ? fn(prev) : fn;
       window.storage.set("dump_locations", JSON.stringify(next)).catch(()=>{});
-      // 제외목록은 Supabase에 영구 저장
-      window.sbRecords.upsert({
-        id: 1,
-        type: "settings",
-        date: "1970-01-01",
-        vehicle: "",
-        from: "",
-        to: "",
-        work: { material: "", qty: 0, unit: "" },
-        status: "settings",
-        from_excluded: next.from_excluded || [],
-        to_excluded: next.to_excluded || [],
-      }).then(() => {
-        alert("제외목록 저장 성공: " + JSON.stringify({from_excluded: next.from_excluded, to_excluded: next.to_excluded}));
-      }).catch(e => {
-        alert("제외목록 저장 실패: " + (e?.message || JSON.stringify(e)));
-      });
+      setTimeout(() => persistExcluded(next), 0);
       return next;
     });
   };
