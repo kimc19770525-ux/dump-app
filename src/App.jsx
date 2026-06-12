@@ -2676,14 +2676,25 @@ export default function App() {
         const l = await window.storage.get("dump_locations");
         if (l?.value) {
           const parsed = JSON.parse(l.value);
-          setLocationsState({
+          setLocationsState(prev => ({
+            ...prev,
             from: parsed.from || [],
             to: parsed.to || [],
-            from_excluded: parsed.from_excluded || [],
-            to_excluded: parsed.to_excluded || [],
-          });
+          }));
         }
       } catch (e) { console.error("위치 로드 실패:", e); }
+      // 제외목록은 Supabase에서 로드 (앱 재시작에도 유지)
+      try {
+        const exRecs = await window.sbRecords.getAll();
+        const exData = exRecs.find(r => r.type === "settings" && r.id === "loc_excluded_v1");
+        if (exData) {
+          setLocationsState(prev => ({
+            ...prev,
+            from_excluded: exData.from_excluded || [],
+            to_excluded: exData.to_excluded || [],
+          }));
+        }
+      } catch (e) { console.error("제외목록 로드 실패:", e); }
       // 기사 모드에서도 일보 기록 불러와서 상·하차지 목록 보완
       if (!isAdminMode) {
         try {
@@ -2735,6 +2746,15 @@ export default function App() {
         }
         if (next !== prev) {
           window.storage.set("dump_locations", JSON.stringify(next)).catch(()=>{});
+          if (next.from_excluded !== prev.from_excluded || next.to_excluded !== prev.to_excluded) {
+            window.sbRecords.upsert({
+              id: "loc_excluded_v1", type: "settings",
+              date: "1970-01-01", vehicle: "", from: "", to: "",
+              work: { material: "", qty: 0, unit: "" }, status: "settings",
+              from_excluded: next.from_excluded || [],
+              to_excluded: next.to_excluded || [],
+            }).catch(()=>{});
+          }
         }
         return next;
       });
@@ -2763,9 +2783,20 @@ export default function App() {
   const updateLocations = fn => {
     setLocationsState(prev => {
       const next = typeof fn === "function" ? fn(prev) : fn;
-      window.storage.set("dump_locations", JSON.stringify(next))
-        .then(() => console.log("위치 저장 성공:", next))
-        .catch(e => console.error("위치 저장 실패:", e));
+      window.storage.set("dump_locations", JSON.stringify(next)).catch(()=>{});
+      // 제외목록은 Supabase에 영구 저장
+      window.sbRecords.upsert({
+        id: "loc_excluded_v1",
+        type: "settings",
+        date: "1970-01-01",
+        vehicle: "",
+        from: "",
+        to: "",
+        work: { material: "", qty: 0, unit: "" },
+        status: "settings",
+        from_excluded: next.from_excluded || [],
+        to_excluded: next.to_excluded || [],
+      }).catch(e => console.error("제외목록 저장 실패:", e));
       return next;
     });
   };
