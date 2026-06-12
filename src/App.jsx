@@ -2683,25 +2683,25 @@ export default function App() {
           }));
         }
       } catch (e) { console.error("위치 로드 실패:", e); }
-      // 제외목록은 Supabase에서 로드 (앱 재시작에도 유지)
+      // 제외목록은 Supabase에서 id=1 레코드를 직접 조회 (getAll 1000개 제한 회피)
       try {
-        const exRecs = await window.sbRecords.getAll();
-        const exData = exRecs.find(r => r.type === "settings" && r.vehicle === "SETTINGS");
+        const res = await fetch(`${window.sbRecords.url}/rest/v1/records?id=eq.1&type=eq.settings`, {
+          headers: { apikey: window.sbRecords.key, Authorization: `Bearer ${window.sbRecords.key}` }
+        });
+        const arr = await res.json();
+        const exData = Array.isArray(arr) ? arr[0] : null;
         if (exData) {
-          try {
-            const parsed = JSON.parse(exData.work?.material || "{}");
-            setLocationsState(prev => ({
-              ...prev,
-              from_excluded: parsed.from_excluded || [],
-              to_excluded: parsed.to_excluded || [],
-            }));
-            alert("✅ 로드성공: " + JSON.stringify(parsed.from_excluded) + " / " + JSON.stringify(parsed.to_excluded));
-          } catch (e2) {
-            alert("⚠️ 파싱 실패: " + JSON.stringify(exData.work));
-          }
+          let work = exData.work;
+          if (typeof work === "string") { try { work = JSON.parse(work); } catch {} }
+          const parsed = JSON.parse(work?.material || "{}");
+          setLocationsState(prev => ({
+            ...prev,
+            from_excluded: parsed.from_excluded || [],
+            to_excluded: parsed.to_excluded || [],
+          }));
+          alert("✅ 로드성공: " + JSON.stringify(parsed.from_excluded) + " / " + JSON.stringify(parsed.to_excluded));
         } else {
-          const allTypes = [...new Set(exRecs.map(r=>r.type))];
-          alert("⚠️ settings 못찾음. 전체 레코드 수: " + exRecs.length + " / 타입목록: " + JSON.stringify(allTypes));
+          alert("⚠️ id=1 레코드 없음. 응답: " + JSON.stringify(arr).slice(0,300));
         }
       } catch (e) { alert("❌ 제외목록 로드 에러: " + (e?.message || JSON.stringify(e))); }
       // 기사 모드에서도 일보 기록 불러와서 상·하차지 목록 보완
