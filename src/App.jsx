@@ -2634,6 +2634,7 @@ function AdminDash({ records, vehicles, setVehicles, mappings, setMappings, onSa
 // ════════════════════════════════════════════════════════════
 // 메인 앱
 // ════════════════════════════════════════════════════════════
+const EXCLUDED_REC_ID = 9999999999999; // Date.now()보다 큰 고정 id (getAll 정렬시 상위권 유지)
 export default function App() {
   const [tab, setTab]                   = useState("report");
   const [records, setRecords]           = useState([]);
@@ -2680,13 +2681,10 @@ export default function App() {
           }));
         }
       } catch (e) { console.error("위치 로드 실패:", e); }
-      // 제외목록은 Supabase에서 id=1 레코드를 직접 조회 (getAll 1000개 제한 회피)
+      // 제외목록은 Supabase에서 고정 id 레코드를 조회
       try {
-        const res = await fetch(`${window.sbRecords.url}/rest/v1/records?id=eq.1&type=eq.settings`, {
-          headers: { apikey: window.sbRecords.key, Authorization: `Bearer ${window.sbRecords.key}` }
-        });
-        const arr = await res.json();
-        const exData = Array.isArray(arr) ? arr[0] : null;
+        const exRecs = await window.sbRecords.getAll();
+        const exData = exRecs.find(r => Number(r.id) === EXCLUDED_REC_ID);
         if (exData) {
           let work = exData.work;
           if (typeof work === "string") { try { work = JSON.parse(work); } catch {} }
@@ -2698,7 +2696,7 @@ export default function App() {
           }));
           alert("✅ 로드: 제외상차지 " + (parsed.from_excluded||[]).length + "개 / 제외하차지 " + (parsed.to_excluded||[]).length + "개");
         } else {
-          alert("⚠️ id=1 레코드 없음. status=" + res.status + " body=" + JSON.stringify(arr).slice(0,200));
+          alert("⚠️ 설정 레코드 없음. 전체 레코드 수: " + exRecs.length);
         }
       } catch (e) { alert("❌ 로드 에러: " + (e?.message || String(e))); }
       // 기사 모드에서도 일보 기록 불러와서 상·하차지 목록 보완
@@ -2787,10 +2785,8 @@ export default function App() {
   };
 
   const persistExcluded = (next) => {
-    // report 레코드와 완전히 동일한 필드 구조 사용 (스키마 문제 방지)
-    // 제외목록은 work.material 안에 JSON 문자열로 저장
     const payload = {
-      id: 1,
+      id: EXCLUDED_REC_ID,
       type: "settings",
       status: "approved",
       date: today(),
@@ -2807,25 +2803,15 @@ export default function App() {
       },
       submittedAt: new Date().toISOString(),
     };
-    fetch(`${window.sbRecords.url}/rest/v1/records?on_conflict=id`, {
-      method: "POST",
-      headers: {
-        apikey: window.sbRecords.key,
-        Authorization: `Bearer ${window.sbRecords.key}`,
-        "Content-Type": "application/json",
-        "Prefer": "resolution=merge-duplicates,return=representation",
-      },
-      body: JSON.stringify(payload),
-    }).then(async (res) => {
-      const text = await res.text();
-      if (!res.ok) {
-        alert("❌ 저장 실패 (" + res.status + "): " + text.slice(0,300));
-      } else {
-        alert("✅ 저장됨: " + text.slice(0,200));
+    try {
+      const result = window.sbRecords.upsert(payload);
+      if (result && typeof result.then === "function") {
+        result.then(() => { alert("✅ 저장 완료"); })
+              .catch(e => { alert("❌ 저장 실패: " + (e?.message || String(e))); });
       }
-    }).catch(e => {
+    } catch (e) {
       alert("❌ 저장 에러: " + (e?.message || String(e)));
-    });
+    }
   };
 
   const updateLocations = fn => {
