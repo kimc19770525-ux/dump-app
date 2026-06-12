@@ -1305,9 +1305,6 @@ function LocManagePanel({ locations, setLocations, records, onBulkRename }) {
         기사가 입력하면 자동으로 목록에 쌓여요.<br/>
         ✏️ 눌러서 이름 수정하면 기존 일보도 자동으로 바뀌어요.
       </div>
-      <div style={{ fontSize: 11, color: C.danger, marginBottom: 10, fontFamily: "monospace" }}>
-        [디버그] 제외-상차지: {JSON.stringify(locations.from_excluded||[])} / 제외-하차지: {JSON.stringify(locations.to_excluded||[])}
-      </div>
 
       {[["from","↑ 상차지",allFrom,C.blue],["to","↓ 하차지",allTo,C.green]].map(([type,label,list,col])=>(
         <div key={type} style={{ marginBottom: 16 }}>
@@ -2699,11 +2696,8 @@ export default function App() {
             from_excluded: parsed.from_excluded || [],
             to_excluded: parsed.to_excluded || [],
           }));
-          alert("✅ 로드성공: " + JSON.stringify(parsed.from_excluded) + " / " + JSON.stringify(parsed.to_excluded));
-        } else {
-          alert("⚠️ id=1 레코드 없음. 응답: " + JSON.stringify(arr).slice(0,300));
         }
-      } catch (e) { alert("❌ 제외목록 로드 에러: " + (e?.message || JSON.stringify(e))); }
+      } catch (e) { console.error("제외목록 로드 실패:", e); }
       // 기사 모드에서도 일보 기록 불러와서 상·하차지 목록 보완
       if (!isAdminMode) {
         try {
@@ -2813,16 +2807,10 @@ export default function App() {
     try {
       const result = window.sbRecords.upsert(payload);
       if (result && typeof result.then === "function") {
-        result.then((res) => {
-          alert("✅ upsert 응답: " + JSON.stringify(res).slice(0,300));
-        }).catch(e => {
-          alert("❌ upsert reject: " + (e?.message || JSON.stringify(e)));
-        });
-      } else {
-        alert("⚠️ upsert가 Promise 아님 (반환값: " + String(result) + ")");
+        result.catch(e => console.error("제외목록 저장 실패:", e));
       }
     } catch (e) {
-      alert("❌ upsert 호출 에러: " + (e?.message || JSON.stringify(e)));
+      console.error("제외목록 저장 에러:", e);
     }
   };
 
