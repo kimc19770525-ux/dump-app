@@ -1305,6 +1305,9 @@ function LocManagePanel({ locations, setLocations, records, onBulkRename }) {
         기사가 입력하면 자동으로 목록에 쌓여요.<br/>
         ✏️ 눌러서 이름 수정하면 기존 일보도 자동으로 바뀌어요.
       </div>
+      <div style={{ fontSize: 11, color: C.danger, marginBottom: 10, fontFamily: "monospace" }}>
+        [디버그] 제외-상차지: {JSON.stringify(locations.from_excluded||[])} / 제외-하차지: {JSON.stringify(locations.to_excluded||[])}
+      </div>
 
       {[["from","↑ 상차지",allFrom,C.blue],["to","↓ 하차지",allTo,C.green]].map(([type,label,list,col])=>(
         <div key={type} style={{ marginBottom: 16 }}>
