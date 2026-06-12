@@ -2694,11 +2694,8 @@ export default function App() {
             from_excluded: parsed.from_excluded || [],
             to_excluded: parsed.to_excluded || [],
           }));
-          alert("✅ 로드: 제외상차지 " + (parsed.from_excluded||[]).length + "개 / 제외하차지 " + (parsed.to_excluded||[]).length + "개");
-        } else {
-          alert("⚠️ 설정 레코드 없음. 전체 레코드 수: " + exRecs.length);
         }
-      } catch (e) { alert("❌ 로드 에러: " + (e?.message || String(e))); }
+      } catch (e) { console.error("제외목록 로드 실패:", e); }
       // 기사 모드에서도 일보 기록 불러와서 상·하차지 목록 보완
       if (!isAdminMode) {
         try {
@@ -2806,11 +2803,10 @@ export default function App() {
     try {
       const result = window.sbRecords.upsert(payload);
       if (result && typeof result.then === "function") {
-        result.then(() => { alert("✅ 저장 완료"); })
-              .catch(e => { alert("❌ 저장 실패: " + (e?.message || String(e))); });
+        result.catch(e => console.error("제외목록 저장 실패:", e));
       }
     } catch (e) {
-      alert("❌ 저장 에러: " + (e?.message || String(e)));
+      console.error("제외목록 저장 에러:", e);
     }
   };
 
