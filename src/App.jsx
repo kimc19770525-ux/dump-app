@@ -2696,8 +2696,11 @@ export default function App() {
             from_excluded: parsed.from_excluded || [],
             to_excluded: parsed.to_excluded || [],
           }));
+          alert("✅ 로드: 제외상차지 " + (parsed.from_excluded||[]).length + "개 / 제외하차지 " + (parsed.to_excluded||[]).length + "개");
+        } else {
+          alert("⚠️ id=1 레코드 없음. status=" + res.status + " body=" + JSON.stringify(arr).slice(0,200));
         }
-      } catch (e) { console.error("제외목록 로드 실패:", e); }
+      } catch (e) { alert("❌ 로드 에러: " + (e?.message || String(e))); }
       // 기사 모드에서도 일보 기록 불러와서 상·하차지 목록 보완
       if (!isAdminMode) {
         try {
@@ -2804,14 +2807,25 @@ export default function App() {
       },
       submittedAt: new Date().toISOString(),
     };
-    try {
-      const result = window.sbRecords.upsert(payload);
-      if (result && typeof result.then === "function") {
-        result.catch(e => console.error("제외목록 저장 실패:", e));
+    fetch(`${window.sbRecords.url}/rest/v1/records?on_conflict=id`, {
+      method: "POST",
+      headers: {
+        apikey: window.sbRecords.key,
+        Authorization: `Bearer ${window.sbRecords.key}`,
+        "Content-Type": "application/json",
+        "Prefer": "resolution=merge-duplicates,return=representation",
+      },
+      body: JSON.stringify(payload),
+    }).then(async (res) => {
+      const text = await res.text();
+      if (!res.ok) {
+        alert("❌ 저장 실패 (" + res.status + "): " + text.slice(0,300));
+      } else {
+        alert("✅ 저장됨: " + text.slice(0,200));
       }
-    } catch (e) {
-      console.error("제외목록 저장 에러:", e);
-    }
+    }).catch(e => {
+      alert("❌ 저장 에러: " + (e?.message || String(e)));
+    });
   };
 
   const updateLocations = fn => {
