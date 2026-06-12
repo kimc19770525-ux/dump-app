@@ -2686,7 +2686,7 @@ export default function App() {
       // 제외목록은 Supabase에서 로드 (앱 재시작에도 유지)
       try {
         const exRecs = await window.sbRecords.getAll();
-        const exData = exRecs.find(r => r.type === "settings" && r.id === "loc_excluded_v1");
+        const exData = exRecs.find(r => r.type === "settings" && r.id === 1);
         if (exData) {
           setLocationsState(prev => ({
             ...prev,
@@ -2748,7 +2748,7 @@ export default function App() {
           window.storage.set("dump_locations", JSON.stringify(next)).catch(()=>{});
           if (next.from_excluded !== prev.from_excluded || next.to_excluded !== prev.to_excluded) {
             window.sbRecords.upsert({
-              id: "loc_excluded_v1", type: "settings",
+              id: 1, type: "settings",
               date: "1970-01-01", vehicle: "", from: "", to: "",
               work: { material: "", qty: 0, unit: "" }, status: "settings",
               from_excluded: next.from_excluded || [],
@@ -2786,7 +2786,7 @@ export default function App() {
       window.storage.set("dump_locations", JSON.stringify(next)).catch(()=>{});
       // 제외목록은 Supabase에 영구 저장
       window.sbRecords.upsert({
-        id: "loc_excluded_v1",
+        id: 1,
         type: "settings",
         date: "1970-01-01",
         vehicle: "",
@@ -2796,7 +2796,11 @@ export default function App() {
         status: "settings",
         from_excluded: next.from_excluded || [],
         to_excluded: next.to_excluded || [],
-      }).catch(e => console.error("제외목록 저장 실패:", e));
+      }).then(() => {
+        alert("제외목록 저장 성공: " + JSON.stringify({from_excluded: next.from_excluded, to_excluded: next.to_excluded}));
+      }).catch(e => {
+        alert("제외목록 저장 실패: " + (e?.message || JSON.stringify(e)));
+      });
       return next;
     });
   };
