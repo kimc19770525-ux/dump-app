@@ -1687,7 +1687,7 @@ function AdminAddModal({ vehicles, locations, onClose, onAdd }) {
       alert("날짜, 차량, 상차지, 하차지, 수량을 모두 입력해주세요."); return;
     }
     const rec = {
-      id: "admin_" + Date.now(),
+      id: Date.now(),
       type: "report",
       status: "approved",
       date,
@@ -1789,35 +1789,9 @@ function PriceInputModal({ reportRecs, customPrices, setCustomPrices, onClose, o
   );
 }
 
-function DriverDeductionPanel({ vehicles, driverSettings, setDriverSettings }) {
-  const [sel, setSel] = useState(vehicles[0] || "");
-  const ds = driverSettings[sel] || {};
-
-  const update = (patch) => {
-    setDriverSettings(prev => ({ ...prev, [sel]: { ...(prev[sel] || {}), ...patch } }));
-  };
-
-  const inputStyle = { width: "100%", background: C.card2, border: `1.5px solid ${C.border}`, borderRadius: 8, padding: "8px 10px", color: C.text, fontSize: 13, outline: "none" };
-
-  return (
-    <Card style={{ marginBottom: 14 }}>
-      <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 4 }}>🧾 차량별 기사명 설정</div>
-      <div style={{ fontSize: 12, color: C.muted, marginBottom: 12 }}>"🚛 기사별 정산" 출력 시 기성내역서 시트 우측 상단에 표시됩니다. 매출(운반비)은 자동 입력되고, 할부·유류비·수수료 등 나머지 항목은 차량마다 달라 빈칸으로 출력되니 직접 작성하세요.</div>
-      <Field label="차량 선택">
-        <select value={sel} onChange={e => setSel(e.target.value)} style={inputStyle}>
-          {vehicles.map(v => <option key={v} value={v}>{v}</option>)}
-        </select>
-      </Field>
-      <Field label="기사명">
-        <input value={ds.driverName || ""} onChange={e => update({ driverName: e.target.value })} placeholder="예: 주덕중" style={inputStyle} />
-      </Field>
-    </Card>
-  );
-}
-
 function AdminDash({ records, vehicles, setVehicles, mappings, setMappings, onSaveMappings, prices, setPrices, locations, setLocations, driverSettings, setDriverSettings, adminPw, setAdminPw, onLock, onSaveExpense, onRefresh }) {
   const _today = new Date(); const _ty = _today.getFullYear(), _tm = String(_today.getMonth()+1).padStart(2,"0"), _td = String(_today.getDate()).padStart(2,"0"); const _todayStr = `${_ty}-${_tm}-${_td}`;
-  const [period, setPeriod]         = useState("end");
+  const [period, setPeriod]         = useState("custom");
   const [showPriceModal, setShowPriceModal] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
   const [customPrices, setCustomPrices]     = useState({});
@@ -2156,7 +2130,7 @@ function AdminDash({ records, vehicles, setVehicles, mappings, setMappings, onSa
     } catch(err) { alert("엑셀 생성 오류: " + err.message); }
   };
 
-  // ── 기사별 정산서 xlsx — 차량별 파일 분리 + 기성내역서 시트 포함 ──────────
+  // ── 기사별 정산서 xlsx — 5623/6821/6957 양식 그대로 ──────────
   const downloadByVehicle = (customPrices = {}) => {
     // XLSX imported
 
@@ -2180,40 +2154,35 @@ function AdminDash({ records, vehicles, setVehicles, mappings, setMappings, onSa
       font: { name: "돋움", bold: !!bold, sz: sz || 10 },
       alignment: { horizontal: align || "left", vertical: "center" },
     });
-    // 금액 표시(천단위 콤마, 예: 100,000)
-    const SBN = (bold) => ({
-      font: { name: "돋움", bold: !!bold, sz: 10 },
-      alignment: { horizontal: "right", vertical: "center" },
-      border: bdr,
-      numFmt: "#,##0",
-    });
     const C2 = (ws, addr, val, style) => { ws[addr] = { v: val, t: typeof val === "number" ? "n" : "s", s: style }; };
     const CF = (ws, addr, formula, style) => { ws[addr] = { f: formula, t: "n", s: style }; };
 
-    const monthNum = Number(vStartD.slice(5, 7));
+    const wb = XLSX.utils.book_new();
+    const monthStr = `${vStartD} ~ ${vEndD}`;
 
-    Object.entries(byVehicle).forEach(([vehicle, rows], idx) => {
+    Object.entries(byVehicle).forEach(([vehicle, rows]) => {
       // ── 시트1: 작업내역
 
       const ws1 = {};
       ws1["!merges"] = [];
       ws1["!cols"] = [
-        { wch: 3.75 }, { wch: 6.5 }, { wch: 6.5 },
+        { wch: 10 }, { wch: 3.75 }, { wch: 6.5 }, { wch: 6.5 },
         { wch: 13 }, { wch: 16.75 }, { wch: 6.875 }, { wch: 6.5 },
-        { wch: 6.5 }, { wch: 7.5 }, { wch: 9.5 }, { wch: 10.5 }
+        { wch: 6.5 }, { wch: 7.5 }, { wch: 8.375 }, { wch: 9 }
       ];
 
-      // 헤더행 (매입처 컬럼 삭제)
-      C2(ws1, "B1", "날자", SB(true, "center"));
-      C2(ws1, "C1", "", SB(true, "center"));
-      C2(ws1, "D1", "상차지", SB(true, "center"));
-      C2(ws1, "E1", "하차지", SB(true, "center"));
-      C2(ws1, "F1", "품명", SB(true, "center"));
-      C2(ws1, "G1", "수량", SB(true, "center"));
-      C2(ws1, "H1", "m3", SB(true, "center"));
-      C2(ws1, "I1", "시간/㎥", SB(true, "center"));
-      C2(ws1, "J1", "운반단가", SB(true, "center"));
-      C2(ws1, "K1", "지급운반비", SB(true, "center"));
+      // 헤더행
+      C2(ws1, "A1", "매입처", SB(true, "center"));
+      C2(ws1, "C1", "날자", SB(true, "center"));
+      C2(ws1, "D1", "", SB(true, "center"));
+      C2(ws1, "E1", "상차지", SB(true, "center"));
+      C2(ws1, "F1", "하차지", SB(true, "center"));
+      C2(ws1, "G1", "품명", SB(true, "center"));
+      C2(ws1, "H1", "수량", SB(true, "center"));
+      C2(ws1, "I1", "m3", SB(true, "center"));
+      C2(ws1, "J1", "시간/㎥", SB(true, "center"));
+      C2(ws1, "K1", "운반단가", SB(true, "center"));
+      C2(ws1, "L1", "지급운반비", SB(true, "center"));
 
       // 데이터 행
       const sortedV = rows.slice().sort((a, b) => a.date.localeCompare(b.date));
@@ -2225,121 +2194,35 @@ function AdminDash({ records, vehicles, setVehicles, mappings, setMappings, onSa
         const locKey = (row.from||"") + "||" + (row.to||"");
         const price = customPrices[locKey] || getPrice(row.from, row.to, row.work?.material) || 0;
         C2(ws1, `A${r}`, "", SB(false));
-        ws1[`B${r}`] = { v: day, t: "n", s: SB(false, "right") };
-        C2(ws1, `C${r}`, Number(vehicle) || vehicle, SB(false));
-        C2(ws1, `D${r}`, row.from || "", SB(false));
-        C2(ws1, `E${r}`, row.to || "", SB(false));
-        C2(ws1, `F${r}`, row.work?.material || "", SB(false));
-        if (!isM3 && qty) { ws1[`G${r}`] = { v: qty, t: "n", s: SB(false, "right") }; }
-        else { C2(ws1, `G${r}`, "", SB(false, "right")); }
-        if (isM3 && qty) { ws1[`H${r}`] = { v: qty, t: "n", s: SB(false, "right") }; }
+        C2(ws1, `B${r}`, "", SB(false));
+        ws1[`C${r}`] = { v: day, t: "n", s: SB(false, "right") };
+        C2(ws1, `D${r}`, Number(vehicle) || vehicle, SB(false));
+        C2(ws1, `E${r}`, row.from || "", SB(false));
+        C2(ws1, `F${r}`, row.to || "", SB(false));
+        C2(ws1, `G${r}`, row.work?.material || "", SB(false));
+        if (!isM3 && qty) { ws1[`H${r}`] = { v: qty, t: "n", s: SB(false, "right") }; }
         else { C2(ws1, `H${r}`, "", SB(false, "right")); }
-        C2(ws1, `I${r}`, "", SB(false, "right"));
-        if (price) { ws1[`J${r}`] = { v: price, t: "n", s: SBN(false) }; }
-        else { C2(ws1, `J${r}`, "", SBN(false)); }
-        CF(ws1, `K${r}`, `IFERROR(J${r}*G${r},0)+IFERROR(J${r}*H${r},0)`, SBN(false));
+        if (isM3 && qty) { ws1[`I${r}`] = { v: qty, t: "n", s: SB(false, "right") }; }
+        else { C2(ws1, `I${r}`, "", SB(false, "right")); }
+        C2(ws1, `J${r}`, "", SB(false, "right"));
+        if (price) { ws1[`K${r}`] = { v: price, t: "n", s: SB(false, "right") }; }
+        else { C2(ws1, `K${r}`, "", SB(false, "right")); }
+        CF(ws1, `L${r}`, `IFERROR(K${r}*H${r},0)+IFERROR(K${r}*I${r},0)`, SB(false, "right"));
       });
 
       // 합계행
       const totalRow = sortedV.length + 2;
       C2(ws1, `A${totalRow}`, "", SB(false));
       ws1[`B${totalRow}`] = { v: vStartD, t: "s", s: SB(false) };
-      C2(ws1, `C${totalRow}`, Number(vehicle) || vehicle, SB(false));
-      CF(ws1, `K${totalRow}`, `SUM(K2:K${totalRow - 1})`, SBN(true));
+      C2(ws1, `D${totalRow}`, Number(vehicle) || vehicle, SB(false));
+      CF(ws1, `L${totalRow}`, `SUM(L2:L${totalRow - 1})`, SB(true, "right"));
 
-      ws1["!ref"] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: totalRow, c: 10 } });
-
-      // ── 시트2: 기성내역서 (매출만 자동입력, 나머지는 차량별로 직접 작성) ──
-      const ds = driverSettings[vehicle] || {};
-
-      const sheet1Name = vehicle.slice(0, 31);
-      const ws2 = {};
-      ws2["!cols"] = [
-        { wch: 13 }, { wch: 14 }, { wch: 3 }, { wch: 13 }, { wch: 14 },
-      ];
-      ws2["!merges"] = [
-        XLSX.utils.decode_range("A1:E1"),
-        XLSX.utils.decode_range("A2:B2"),
-        XLSX.utils.decode_range("D2:E2"),
-        XLSX.utils.decode_range("B13:E13"),
-      ];
-
-      // 강조 색상
-      const FILL_PEACH  = { patternType: "solid", fgColor: { rgb: "FCE4D6" } };
-      const FILL_YELLOW = { patternType: "solid", fgColor: { rgb: "FFFF00" } };
-
-      // 제목
-      C2(ws2, "A1", `${monthNum}월 기성내역서`, S(true, "center", 14));
-      // 차량번호 / 기사명
-      C2(ws2, "A2", `차량번호: ${vehicle}`, S(false, "left", 11));
-      C2(ws2, "D2", `기사명: ${ds.driverName || ""}`, S(false, "left", 11));
-
-      // 좌측 표: 정산 내역 (헤더)
-      C2(ws2, "A3", "항목", SB(true, "center"));
-      C2(ws2, "B3", "금액", SB(true, "center"));
-      // 우측 표: 공제 내역 (헤더)
-      C2(ws2, "D3", "공제항목", SB(true, "center"));
-      C2(ws2, "E3", "금액", SB(true, "center"));
-
-      // 좌측 표 행 — 운반비(매출)는 작업내역 시트 합계 자동 연동, 나머지는 차량마다 달라 빈칸
-      C2(ws2, "A4", "운반비(매출)", SB(false));
-      CF(ws2, "B4", `'${sheet1Name}'!K${totalRow}`, SBN(false));
-      C2(ws2, "A5", "수수료", SB(false));
-      CF(ws2, "B5", "B4*0.06", SBN(false));
-      C2(ws2, "A6", "계산서", SB(false));
-      C2(ws2, "B6", "", SBN(false));
-      C2(ws2, "A7", "부가세", SB(false));
-      C2(ws2, "B7", "", SBN(false));
-      C2(ws2, "A8", "계", { ...SB(true), fill: FILL_PEACH });
-      C2(ws2, "B8", "", { ...SBN(true), fill: FILL_PEACH });
-      // 좌측 표 빈 행 (우측 공제표와 높이 맞춤) — 10행은 "가불잔액"
-      C2(ws2, "A9", "", SB(false));
-      C2(ws2, "B9", "", SBN(false));
-      C2(ws2, "A10", "가불잔액", SB(false));
-      C2(ws2, "B10", "", SBN(false));
-      C2(ws2, "A11", "", SB(false));
-      C2(ws2, "B11", "", SBN(false));
-      C2(ws2, "A12", "", SB(false));
-      C2(ws2, "B12", "", SBN(false));
-
-      // 우측 표 행 — 공제 항목 (전부 빈칸, 차량마다 직접 입력)
-      C2(ws2, "D4", "할부", SB(false));
-      C2(ws2, "E4", "", SBN(false));
-      C2(ws2, "D5", "유류비", SB(false));
-      C2(ws2, "E5", "", SBN(false));
-      C2(ws2, "D6", "지입+무전", SB(false));
-      C2(ws2, "E6", "", SBN(false));
-      C2(ws2, "D7", "카드", SB(false));
-      C2(ws2, "E7", "", SBN(false));
-      C2(ws2, "D8", "보험", SB(false));
-      C2(ws2, "E8", "", SBN(false));
-      C2(ws2, "D9", "과태료", SB(false));
-      C2(ws2, "E9", "", SBN(false));
-      C2(ws2, "D10", "가불공제", SB(false));
-      C2(ws2, "E10", "", SBN(false));
-      C2(ws2, "D11", "하이패스", SB(false));
-      C2(ws2, "E11", "", SBN(false));
-      C2(ws2, "D12", "총공제", { ...SB(true), fill: FILL_PEACH });
-      CF(ws2, "E12", "SUM(E4:E11)", { ...SBN(true), fill: FILL_PEACH });
-
-      // 입금액 (강조행) = 계 - 총공제
-      C2(ws2, "A13", "입금액", { ...SB(true, "left", 12), fill: FILL_YELLOW });
-      CF(ws2, "B13", "IFERROR(B8-E12,0)", { ...SBN(true), fill: FILL_YELLOW });
-      ws2["B13"].s.font.sz = 12;
-
-      ws2["!ref"] = "A1:E13";
-
-      // ── 차량별 워크북 생성 + 개별 파일 다운로드 ──
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws1, sheet1Name);
-      XLSX.utils.book_append_sheet(wb, ws2, "기성내역서");
-
-      setTimeout(() => {
-        xlsxDl(wb, `기사정산_${vehicle}_${vStartD}_${vEndD}.xlsx`);
-      }, idx * 400);
+      ws1["!ref"] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: totalRow, c: 11 } });
+      XLSX.utils.book_append_sheet(wb, ws1, vehicle.slice(0, 31));
     });
-  };
 
+    xlsxDl(wb, `기사정산_${vStartD}_${vEndD}.xlsx`);
+  };
 
   // 일보 수정 저장
   const saveEdit = async () => {
@@ -2666,9 +2549,6 @@ function AdminDash({ records, vehicles, setVehicles, mappings, setMappings, onSa
       {/* ── 설정 탭 ── */}
       {adminTab === "settings" && (
         <>
-          {/* 차량별 공제설정 (기성내역서용) */}
-          <DriverDeductionPanel vehicles={vehicles} driverSettings={driverSettings} setDriverSettings={setDriverSettings} />
-
           {/* 상·하차지 목록 관리 */}
           <LocManagePanel locations={locations} setLocations={setLocations} records={records} onBulkRename={bulkRename} />
 
@@ -2720,7 +2600,7 @@ function AdminDash({ records, vehicles, setVehicles, mappings, setMappings, onSa
           setShowAddModal(false);
           alert("일보가 추가됐습니다.");
         } catch(e) {
-          alert("저장 실패: " + e.message);
+          alert("저장 실패: " + (e?.message || JSON.stringify(e)));
         }
       }}
     />}
