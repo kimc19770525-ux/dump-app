@@ -2503,10 +2503,14 @@ export default function App() {
       try { const mat = await window.storage.get("dump_materials"); if (mat?.value) setMaterialsState(JSON.parse(mat.value)); } catch {}
       // 상·하차지 목록은 기사/관리자 모두 불러옴
       try { const l = await window.storage.get("dump_locations"); if (l?.value) setLocationsState(JSON.parse(l.value)); } catch {}
-      // 제외목록 Supabase에서 로드
+      // 제외목록 Supabase에서 직접 조회 (getAll 1000개 제한 회피)
       try {
-        const exRecs = await window.sbRecords.getAll();
-        const exData = exRecs.find(r => Number(r.id) === EXCLUDED_REC_ID);
+        const exRes = await fetch(
+          `${window.sbRecords.url}/rest/v1/records?id=eq.${EXCLUDED_REC_ID}`,
+          { headers: { apikey: window.sbRecords.key, Authorization: `Bearer ${window.sbRecords.key}` } }
+        );
+        const exArr = await exRes.json();
+        const exData = Array.isArray(exArr) ? exArr[0] : null;
         if (exData) {
           let work = exData.work;
           if (typeof work === "string") { try { work = JSON.parse(work); } catch {} }
@@ -2585,18 +2589,24 @@ export default function App() {
     setLocationsState(prev => {
       const next = typeof fn === "function" ? fn(prev) : fn;
       window.storage.set("dump_locations", JSON.stringify(next)).catch(()=>{});
-      // excluded 변경시 Supabase에 영구 저장
+      // excluded 변경시 Supabase에 영구 저장 (직접 fetch로 upsert)
       setTimeout(() => {
-        const payload = {
+        const exPayload = {
           id: EXCLUDED_REC_ID, type: "settings", status: "approved",
-          date: today(), vehicle: "SETTINGS", from: "SETTINGS", to: "SETTINGS",
+          date: today(), vehicle: "SETTINGS",
           work: { material: JSON.stringify({ from_excluded: next.from_excluded||[], to_excluded: next.to_excluded||[] }), qty: 0, unit: "개" },
           submittedAt: new Date().toISOString(),
         };
-        try {
-          const r = window.sbRecords.upsert(payload);
-          if (r && typeof r.then === "function") r.catch(e => console.error("제외목록 저장 실패:", e));
-        } catch (e) { console.error("제외목록 저장 에러:", e); }
+        fetch(`${window.sbRecords.url}/rest/v1/records`, {
+          method: "POST",
+          headers: {
+            apikey: window.sbRecords.key,
+            Authorization: `Bearer ${window.sbRecords.key}`,
+            "Content-Type": "application/json",
+            "Prefer": "resolution=merge-duplicates",
+          },
+          body: JSON.stringify(exPayload),
+        }).catch(e => console.error("제외목록 저장 실패:", e));
       }, 0);
       return next;
     });
