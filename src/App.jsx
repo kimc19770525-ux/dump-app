@@ -2464,6 +2464,7 @@ function AdminDash({ records, vehicles, setVehicles, mappings, setMappings, onSa
 // ════════════════════════════════════════════════════════════
 // 메인 앱
 // ════════════════════════════════════════════════════════════
+const EXCLUDED_REC_ID = 9999999999998; // 상하차지 제외목록 저장용 고정 id
 export default function App() {
   const [tab, setTab]                   = useState("report");
   const [records, setRecords]           = useState([]);
@@ -2502,6 +2503,21 @@ export default function App() {
       try { const mat = await window.storage.get("dump_materials"); if (mat?.value) setMaterialsState(JSON.parse(mat.value)); } catch {}
       // 상·하차지 목록은 기사/관리자 모두 불러옴
       try { const l = await window.storage.get("dump_locations"); if (l?.value) setLocationsState(JSON.parse(l.value)); } catch {}
+      // 제외목록 Supabase에서 로드
+      try {
+        const exRecs = await window.sbRecords.getAll();
+        const exData = exRecs.find(r => Number(r.id) === EXCLUDED_REC_ID);
+        if (exData) {
+          let work = exData.work;
+          if (typeof work === "string") { try { work = JSON.parse(work); } catch {} }
+          const parsed = JSON.parse(work?.material || "{}");
+          setLocationsState(prev => ({
+            ...prev,
+            from_excluded: parsed.from_excluded || [],
+            to_excluded: parsed.to_excluded || [],
+          }));
+        }
+      } catch (e) { console.error("제외목록 로드 실패:", e); }
       // 기사 모드에서도 일보 기록 불러와서 상·하차지 목록 보완
       if (!isAdminMode) {
         try {
@@ -2566,7 +2582,24 @@ export default function App() {
   };
 
   const updateLocations = fn => {
-    setLocationsState(prev => { const next = typeof fn === "function" ? fn(prev) : fn; window.storage.set("dump_locations", JSON.stringify(next)).catch(()=>{}); return next; });
+    setLocationsState(prev => {
+      const next = typeof fn === "function" ? fn(prev) : fn;
+      window.storage.set("dump_locations", JSON.stringify(next)).catch(()=>{});
+      // excluded 변경시 Supabase에 영구 저장
+      setTimeout(() => {
+        const payload = {
+          id: EXCLUDED_REC_ID, type: "settings", status: "approved",
+          date: today(), vehicle: "SETTINGS", from: "SETTINGS", to: "SETTINGS",
+          work: { material: JSON.stringify({ from_excluded: next.from_excluded||[], to_excluded: next.to_excluded||[] }), qty: 0, unit: "개" },
+          submittedAt: new Date().toISOString(),
+        };
+        try {
+          const r = window.sbRecords.upsert(payload);
+          if (r && typeof r.then === "function") r.catch(e => console.error("제외목록 저장 실패:", e));
+        } catch (e) { console.error("제외목록 저장 에러:", e); }
+      }, 0);
+      return next;
+    });
   };
 
   const updateDriverSettings = fn => {
