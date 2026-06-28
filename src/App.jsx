@@ -2505,13 +2505,16 @@ export default function App() {
       try {
         // Supabase에서 직접 조회 (localStorage 캐시 우선순위 문제 회피)
         const locRes = await fetch(
-          `${window.sbRecords.url}/rest/v1/records?type=eq.settings&date=eq.dump_locations&select=data`,
+          `${window.sbRecords.url}/rest/v1/records?type=eq.settings&date=eq.dump_locations&select=data&order=id.desc&limit=1`,
           { headers: { apikey: window.sbRecords.key, Authorization: `Bearer ${window.sbRecords.key}` } }
         );
         const locArr = await locRes.json();
         const locVal = Array.isArray(locArr) && locArr.length > 0 ? locArr[0].data?.value : null;
         if (locVal) {
-          const parsed = JSON.parse(typeof locVal === "string" ? locVal : JSON.stringify(locVal));
+          let parsed;
+          try {
+            parsed = typeof locVal === "string" ? JSON.parse(locVal) : locVal;
+          } catch { parsed = {}; }
           setLocationsState({
             from: parsed.from || [],
             to: parsed.to || [],
@@ -2604,7 +2607,20 @@ export default function App() {
   const updateLocations = fn => {
     setLocationsState(prev => {
       const next = typeof fn === "function" ? fn(prev) : fn;
-      window.storage.set("dump_locations", JSON.stringify(next)).catch(()=>{});
+      // localStorage에도 저장 (빠른 로드용)
+      try { localStorage.setItem("sb_dump_locations", JSON.stringify(next)); } catch {}
+      // Supabase에 직접 upsert (id=6 고정, data.value에 JSON 저장)
+      window.sbRecords.upsert({
+        id: 6,
+        type: "settings",
+        date: "dump_locations",
+        vehicle: "",
+        work: { material: "", qty: 0, unit: "" },
+        status: "settings",
+        savedAt: new Date().toISOString(),
+        key: "dump_locations",
+        value: JSON.stringify(next),
+      }).catch(()=>{});
       return next;
     });
   };
