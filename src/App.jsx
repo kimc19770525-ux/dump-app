@@ -364,8 +364,10 @@ function ReportForm({ vehicles, locationHints, locations, records, onSave, mater
   // 상차지: locations.from + 일보의 from만
   const fromHints = records ? records.filter(r=>r.type==="report"&&r.from).map(r=>r.from) : [];
   const toHints   = records ? records.filter(r=>r.type==="report"&&r.to).map(r=>r.to)     : [];
-  const fromList  = [...new Set([...(locations?.from||[]), ...fromHints])].sort();
-  const toList    = [...new Set([...(locations?.to  ||[]), ...toHints  ])].sort();
+  const _exFrom = locations?.from_excluded || [];
+  const _exTo   = locations?.to_excluded   || [];
+  const fromList  = [...new Set([...(locations?.from||[]), ...fromHints])].filter(x => !_exFrom.includes(x)).sort();
+  const toList    = [...new Set([...(locations?.to  ||[]), ...toHints  ])].filter(x => !_exTo.includes(x)).sort();
 
   const addTrip = () => {
     if (trips.length >= 10) return;
@@ -2542,10 +2544,16 @@ export default function App() {
     // 상·하차지 자동 목록 추가
     if (rec.type === "report") {
       setLocationsState(prev => {
-        const newFrom = rec.from && !prev.from?.includes(rec.from)
-          ? { ...prev, from: [...(prev.from||[]), rec.from] } : prev;
-        const next = rec.to && !newFrom.to?.includes(rec.to)
-          ? { ...newFrom, to: [...(newFrom.to||[]), rec.to] } : newFrom;
+        let next = prev;
+        const exFrom = prev.from_excluded || [];
+        const exTo   = prev.to_excluded   || [];
+        // excluded에 없는 경우만 추가
+        if (rec.from && !exFrom.includes(rec.from) && !prev.from?.includes(rec.from)) {
+          next = { ...next, from: [...(next.from||[]), rec.from] };
+        }
+        if (rec.to && !exTo.includes(rec.to) && !next.to?.includes(rec.to)) {
+          next = { ...next, to: [...(next.to||[]), rec.to] };
+        }
         if (next !== prev) window.storage.set("dump_locations", JSON.stringify(next)).catch(()=>{});
         return next;
       });
