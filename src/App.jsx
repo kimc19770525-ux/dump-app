@@ -23,7 +23,7 @@ const DEFAULT_VEHICLES = [
   "7785","7799","8367","8627","9145","9451"
 ];
 
-const MATERIALS = ["토사","불량토","매립토","와라","마사","풍암","원석","선별암","모래","A","B","C","13mm","25mm","40mm","혼합"];
+const DEFAULT_MATERIALS = ["토사","불량토","매립토","와라","마사","풍암","원석","선별암","모래","A","B","C","13mm","25mm","40mm","혼합"];
 const UNITS = ["개","m³","톤"];
 const ADMIN_PW = "121512";
 const MATERIAL_COLORS = {
@@ -323,7 +323,7 @@ function LocButtons({ list, value, onChange, placeholder }) {
     </>
   );
 }
-function ReportForm({ vehicles, locationHints, locations, records, onSave }) {
+function ReportForm({ vehicles, locationHints, locations, records, onSave, materials: MATERIALS = DEFAULT_MATERIALS }) {
   const emptyWork = { material: "", qty: "", unit: "개" };
   const emptyTrip = { from: "", to: "", work: { ...emptyWork } };
 
@@ -410,7 +410,7 @@ function ReportForm({ vehicles, locationHints, locations, records, onSave }) {
   };
 
   // 품목 선택 상태 (행별)
-  const MATERIALS = ["토사","불량토","매립토","와라","마사","풍암","원석","선별암","모래","A","B","C","13mm","25mm","40mm","혼합"];
+  // MATERIALS는 props로 전달받음
   const M3_MATS = ["모래","13mm","25mm","40mm","혼합","석분"];
 
   const setMaterial = (i, m) => {
@@ -1578,12 +1578,12 @@ function TodayReports({ todayRecs, todayStr }) {
 // ════════════════════════════════════════════════════════════
 // 기사 화면 — 일보입력 + 오늘 제출내역
 // ════════════════════════════════════════════════════════════
-function DriverScreen({ vehicles, locationHints, locations, records, onSave, onRefresh }) {
+function DriverScreen({ vehicles, locationHints, locations, records, onSave, onRefresh, materials }) {
   return (
     <>
       <Nav />
       <div style={{ background:C.card, borderLeft:`1px solid ${C.border}`, borderRight:`1px solid ${C.border}`, minHeight:"calc(100vh - 110px)" }}>
-        <ReportForm vehicles={vehicles} locationHints={locationHints} locations={locations} records={records} onSave={onSave} />
+        <ReportForm vehicles={vehicles} locationHints={locationHints} locations={locations} records={records} onSave={onSave} materials={materials} />
       </div>
     </>
   );
@@ -1636,7 +1636,7 @@ function PriceInputModal({ records, customPrices, setCustomPrices, onClose, onCo
   );
 }
 
-function AdminDash({ records, vehicles, setVehicles, mappings, setMappings, onSaveMappings, prices, setPrices, locations, setLocations, driverSettings, setDriverSettings, adminPw, setAdminPw, onLock, onSaveExpense, onRefresh }) {
+function AdminDash({ records, vehicles, setVehicles, mappings, setMappings, onSaveMappings, prices, setPrices, locations, setLocations, materials, setMaterials, driverSettings, setDriverSettings, adminPw, setAdminPw, onLock, onSaveExpense, onRefresh }) {
   const _today = new Date(); const _ty = _today.getFullYear(), _tm = String(_today.getMonth()+1).padStart(2,"0"), _td = String(_today.getDate()).padStart(2,"0"); const _todayStr = `${_ty}-${_tm}-${_td}`;
   const [period, setPeriod]         = useState("custom");
   const [showPriceModal, setShowPriceModal] = useState(false);
@@ -1644,6 +1644,7 @@ function AdminDash({ records, vehicles, setVehicles, mappings, setMappings, onSa
   const [customStart, setCustomStart] = useState(_todayStr);
   const [customEnd, setCustomEnd]   = useState(_todayStr);
   const [adminTab, setAdminTab]     = useState("report");
+  const [newMaterial, setNewMaterial] = useState("");
   const [newVehicle, setNewVehicle] = useState("");
   const [newPw, setNewPw]           = useState("");
   const [newPw2, setNewPw2]         = useState("");
@@ -2073,12 +2074,14 @@ function AdminDash({ records, vehicles, setVehicles, mappings, setMappings, onSa
   const saveEdit = async () => {
     if (!editing) return;
     setEditSaving(true);
-    try { await window.sbRecords.upsert(editing); } catch {}
+    try {
+      await window.sbRecords.upsert(editing);
+      // 로컬 records만 업데이트 (화면 유지)
+      setRecords(prev => prev.map(r => r.id === editing.id ? editing : r));
+    } catch {}
     setEditSaving(false);
     setEditSaved(true);
-    onRefresh();
     setTimeout(() => setEditSaved(false), 1500);
-    // 모달 닫지 않음 - 연속 수정 가능
   };
 
   // 일보 삭제
@@ -2189,7 +2192,7 @@ function AdminDash({ records, vehicles, setVehicles, mappings, setMappings, onSa
                 <Field label="품목">
                   <select value={editing.work?.material||""} onChange={e=>setEditing(f=>({...f,work:{...f.work,material:e.target.value}}))}
                     style={{width:"100%",background:C.card2,border:`1.5px solid ${C.border}`,borderRadius:10,padding:"10px 14px",color:C.text,fontSize:15,outline:"none"}}>
-                    {MATERIALS.map(m=><option key={m}>{m}</option>)}
+                    {(materials||DEFAULT_MATERIALS).map(m=><option key={m}>{m}</option>)}
                   </select>
                 </Field>
               </div>
@@ -2212,7 +2215,7 @@ function AdminDash({ records, vehicles, setVehicles, mappings, setMappings, onSa
                 style={{width:"100%",background:C.card2,border:`1.5px solid ${C.border}`,borderRadius:10,padding:"10px 14px",color:C.text,fontSize:14,resize:"none",outline:"none"}} />
             </Field>
             <div style={{display:"flex",gap:10,marginTop:4}}>
-              <Btn outline color={C.muted} onClick={()=>setEditing(null)} style={{flex:1}}>닫기</Btn>
+              <Btn outline color={C.muted} onClick={()=>{ setEditing(null); onRefresh(); }} style={{flex:1}}>닫기</Btn>
               <Btn onClick={saveEdit} style={{flex:2}} disabled={editSaving}>{editSaving?"저장중...":editSaved?"✅ 완료!":"저장"}</Btn>
             </div>
           </div>
@@ -2386,6 +2389,30 @@ function AdminDash({ records, vehicles, setVehicles, mappings, setMappings, onSa
           {/* 상·하차지 목록 관리 */}
           <LocManagePanel locations={locations} setLocations={setLocations} records={records} onBulkRename={bulkRename} />
 
+          {/* 품목 관리 */}
+          <Card style={{ marginBottom: 14 }}>
+            <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 6 }}>📦 품목 관리</div>
+            <div style={{ fontSize: 12, color: C.muted, marginBottom: 12 }}>품목을 추가하거나 X로 삭제할 수 있어요.</div>
+            <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+              <input
+                value={newMaterial} onChange={e => setNewMaterial(e.target.value)}
+                onKeyDown={e => { if (e.key === "Enter" && newMaterial.trim()) { setMaterials(prev => [...prev, newMaterial.trim()]); setNewMaterial(""); }}}
+                placeholder="새 품목 입력"
+                style={{ flex: 1, background: C.card2, border: `1.5px solid ${C.border}`, borderRadius: 10, padding: "10px 14px", color: C.text, fontSize: 14, outline: "none" }}
+              />
+              <Btn onClick={() => { if (newMaterial.trim()) { setMaterials(prev => [...prev, newMaterial.trim()]); setNewMaterial(""); }}}>추가</Btn>
+            </div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+              {(materials||DEFAULT_MATERIALS).map(m => (
+                <div key={m} style={{ display: "flex", alignItems: "center", gap: 6, background: C.card2, borderRadius: 8, padding: "6px 10px", border: `1px solid ${C.border}` }}>
+                  <span style={{ fontSize: 13, color: C.text }}>{m}</span>
+                  <button onClick={() => setMaterials(prev => prev.filter(x => x !== m))}
+                    style={{ background: "none", border: "none", color: C.danger, fontSize: 14, cursor: "pointer", padding: 0, lineHeight: 1 }}>✕</button>
+                </div>
+              ))}
+            </div>
+          </Card>
+
           {/* 비밀번호 변경 */}
           <Card style={{ marginBottom: 14 }}>
             <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 12 }}>🔐 관리자 비밀번호 변경</div>
@@ -2445,6 +2472,7 @@ export default function App() {
   const [mappings, setMappings]         = useState([]);
   const [prices, setPricesState]        = useState({});
   const [driverSettings, setDSState]    = useState({});
+  const [materials, setMaterialsState] = useState(DEFAULT_MATERIALS);
   const [locations, setLocationsState] = useState({ from: [], to: [] });
   const [adminPw, setAdminPwState]      = useState(ADMIN_PW);
   const [adminUnlocked, setAdminUnlocked] = useState(false);
@@ -2471,6 +2499,7 @@ export default function App() {
     (async () => {
       setLoading(true);
       try { const v = await window.storage.get("dump_vehicles"); if (v?.value) setVehicles(JSON.parse(v.value)); } catch {}
+      try { const mat = await window.storage.get("dump_materials"); if (mat?.value) setMaterialsState(JSON.parse(mat.value)); } catch {}
       // 상·하차지 목록은 기사/관리자 모두 불러옴
       try { const l = await window.storage.get("dump_locations"); if (l?.value) setLocationsState(JSON.parse(l.value)); } catch {}
       // 기사 모드에서도 일보 기록 불러와서 상·하차지 목록 보완
@@ -2532,6 +2561,10 @@ export default function App() {
     setPricesState(prev => { const next = typeof fn === "function" ? fn(prev) : fn; window.storage.set("dump_prices", JSON.stringify(next)).catch(() => {}); return next; });
   };
 
+  const updateMaterials = fn => {
+    setMaterialsState(prev => { const next = typeof fn === "function" ? fn(prev) : fn; window.storage.set("dump_materials", JSON.stringify(next)).catch(()=>{}); return next; });
+  };
+
   const updateLocations = fn => {
     setLocationsState(prev => { const next = typeof fn === "function" ? fn(prev) : fn; window.storage.set("dump_locations", JSON.stringify(next)).catch(()=>{}); return next; });
   };
@@ -2566,6 +2599,7 @@ export default function App() {
           <DriverScreen
             vehicles={vehicles} locationHints={locationHints} locations={locations}
             records={records} onSave={saveRecord} onRefresh={refreshRecords}
+            materials={materials}
           />
         )}
 
@@ -2585,6 +2619,7 @@ export default function App() {
                 mappings={mappings} setMappings={updateMappings} onSaveMappings={updateMappings}
                 prices={prices} setPrices={updatePrices}
                 locations={locations} setLocations={updateLocations}
+                materials={materials} setMaterials={updateMaterials}
                 driverSettings={driverSettings} setDriverSettings={updateDriverSettings}
                 adminPw={adminPw} setAdminPw={setAdminPw}
                 onLock={() => setAdminUnlocked(false)}
