@@ -28,7 +28,6 @@ const UNITS = ["개","m³","톤"];
 const ADMIN_PW = "121512";
 const MATERIAL_COLORS = {
   "모래":  { bg: "#1a3a5c", color: "#64b5f6" },
-  "석분":  { bg: "#1a3a5c", color: "#64b5f6" },
   "혼합":  { bg: "#1a3a5c", color: "#64b5f6" },
   "25mm":  { bg: "#1a3a5c", color: "#64b5f6" },
 };
@@ -2464,7 +2463,6 @@ function AdminDash({ records, vehicles, setVehicles, mappings, setMappings, onSa
 // ════════════════════════════════════════════════════════════
 // 메인 앱
 // ════════════════════════════════════════════════════════════
-const EXCLUDED_REC_ID = 9999999999998; // 상하차지 제외목록 저장용 고정 id
 export default function App() {
   const [tab, setTab]                   = useState("report");
   const [records, setRecords]           = useState([]);
@@ -2502,26 +2500,18 @@ export default function App() {
       try { const v = await window.storage.get("dump_vehicles"); if (v?.value) setVehicles(JSON.parse(v.value)); } catch {}
       try { const mat = await window.storage.get("dump_materials"); if (mat?.value) setMaterialsState(JSON.parse(mat.value)); } catch {}
       // 상·하차지 목록은 기사/관리자 모두 불러옴
-      try { const l = await window.storage.get("dump_locations"); if (l?.value) setLocationsState(JSON.parse(l.value)); } catch {}
-      // 제외목록 Supabase에서 직접 조회 (getAll 1000개 제한 회피)
       try {
-        const exRes = await fetch(
-          `${window.sbRecords.url}/rest/v1/records?id=eq.${EXCLUDED_REC_ID}`,
-          { headers: { apikey: window.sbRecords.key, Authorization: `Bearer ${window.sbRecords.key}` } }
-        );
-        const exArr = await exRes.json();
-        const exData = Array.isArray(exArr) ? exArr[0] : null;
-        if (exData) {
-          let work = exData.work;
-          if (typeof work === "string") { try { work = JSON.parse(work); } catch {} }
-          const parsed = JSON.parse(work?.material || "{}");
-          setLocationsState(prev => ({
-            ...prev,
+        const l = await window.storage.get("dump_locations");
+        if (l?.value) {
+          const parsed = JSON.parse(l.value);
+          setLocationsState({
+            from: parsed.from || [],
+            to: parsed.to || [],
             from_excluded: parsed.from_excluded || [],
             to_excluded: parsed.to_excluded || [],
-          }));
+          });
         }
-      } catch (e) { console.error("제외목록 로드 실패:", e); }
+      } catch {}
       // 기사 모드에서도 일보 기록 불러와서 상·하차지 목록 보완
       if (!isAdminMode) {
         try {
@@ -2588,26 +2578,8 @@ export default function App() {
   const updateLocations = fn => {
     setLocationsState(prev => {
       const next = typeof fn === "function" ? fn(prev) : fn;
+      // window.storage.set이 자동으로 Supabase(dump_locations id=6)에 저장
       window.storage.set("dump_locations", JSON.stringify(next)).catch(()=>{});
-      // excluded 변경시 Supabase에 영구 저장 (직접 fetch로 upsert)
-      setTimeout(() => {
-        const exPayload = {
-          id: EXCLUDED_REC_ID, type: "settings", status: "approved",
-          date: today(), vehicle: "SETTINGS",
-          work: { material: JSON.stringify({ from_excluded: next.from_excluded||[], to_excluded: next.to_excluded||[] }), qty: 0, unit: "개" },
-          submittedAt: new Date().toISOString(),
-        };
-        fetch(`${window.sbRecords.url}/rest/v1/records`, {
-          method: "POST",
-          headers: {
-            apikey: window.sbRecords.key,
-            Authorization: `Bearer ${window.sbRecords.key}`,
-            "Content-Type": "application/json",
-            "Prefer": "resolution=merge-duplicates",
-          },
-          body: JSON.stringify(exPayload),
-        }).catch(e => console.error("제외목록 저장 실패:", e));
-      }, 0);
       return next;
     });
   };
