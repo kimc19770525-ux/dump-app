@@ -2503,10 +2503,15 @@ export default function App() {
       try { const mat = await window.storage.get("dump_materials"); if (mat?.value) setMaterialsState(JSON.parse(mat.value)); } catch {}
       // 상·하차지 목록은 기사/관리자 모두 불러옴
       try {
-        const l = await window.storage.get("dump_locations");
-        if (l?.value) {
-          const parsed = JSON.parse(l.value);
-          alert("로드된 locations: from_excluded=" + JSON.stringify(parsed.from_excluded) + " / to_excluded=" + JSON.stringify(parsed.to_excluded));
+        // Supabase에서 직접 조회 (localStorage 캐시 우선순위 문제 회피)
+        const locRes = await fetch(
+          `${window.sbRecords.url}/rest/v1/records?type=eq.settings&date=eq.dump_locations&select=data`,
+          { headers: { apikey: window.sbRecords.key, Authorization: `Bearer ${window.sbRecords.key}` } }
+        );
+        const locArr = await locRes.json();
+        const locVal = Array.isArray(locArr) && locArr.length > 0 ? locArr[0].data?.value : null;
+        if (locVal) {
+          const parsed = JSON.parse(typeof locVal === "string" ? locVal : JSON.stringify(locVal));
           setLocationsState({
             from: parsed.from || [],
             to: parsed.to || [],
@@ -2514,9 +2519,19 @@ export default function App() {
             to_excluded: parsed.to_excluded || [],
           });
         } else {
-          alert("dump_locations 없음: " + JSON.stringify(l));
+          // Supabase에 없으면 localStorage 폴백
+          const l = await window.storage.get("dump_locations");
+          if (l?.value) {
+            const parsed = JSON.parse(l.value);
+            setLocationsState({
+              from: parsed.from || [],
+              to: parsed.to || [],
+              from_excluded: parsed.from_excluded || [],
+              to_excluded: parsed.to_excluded || [],
+            });
+          }
         }
-      } catch (e) { alert("로드 에러: " + e.message); }
+      } catch (e) { console.error("locations 로드 실패:", e); }
       // 기사 모드에서도 일보 기록 불러와서 상·하차지 목록 보완
       if (!isAdminMode) {
         try {
@@ -2589,9 +2604,7 @@ export default function App() {
   const updateLocations = fn => {
     setLocationsState(prev => {
       const next = typeof fn === "function" ? fn(prev) : fn;
-      window.storage.set("dump_locations", JSON.stringify(next))
-        .then(() => alert("저장완료: from_excluded=" + JSON.stringify(next.from_excluded) + " / to_excluded=" + JSON.stringify(next.to_excluded)))
-        .catch(e => alert("저장실패: " + e.message));
+      window.storage.set("dump_locations", JSON.stringify(next)).catch(()=>{});
       return next;
     });
   };
