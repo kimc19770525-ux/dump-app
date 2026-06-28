@@ -2506,14 +2506,17 @@ export default function App() {
         const l = await window.storage.get("dump_locations");
         if (l?.value) {
           const parsed = JSON.parse(l.value);
+          alert("로드된 locations: from_excluded=" + JSON.stringify(parsed.from_excluded) + " / to_excluded=" + JSON.stringify(parsed.to_excluded));
           setLocationsState({
             from: parsed.from || [],
             to: parsed.to || [],
             from_excluded: parsed.from_excluded || [],
             to_excluded: parsed.to_excluded || [],
           });
+        } else {
+          alert("dump_locations 없음: " + JSON.stringify(l));
         }
-      } catch {}
+      } catch (e) { alert("로드 에러: " + e.message); }
       // 기사 모드에서도 일보 기록 불러와서 상·하차지 목록 보완
       if (!isAdminMode) {
         try {
@@ -2586,8 +2589,9 @@ export default function App() {
   const updateLocations = fn => {
     setLocationsState(prev => {
       const next = typeof fn === "function" ? fn(prev) : fn;
-      // window.storage.set이 자동으로 Supabase(dump_locations id=6)에 저장
-      window.storage.set("dump_locations", JSON.stringify(next)).catch(()=>{});
+      window.storage.set("dump_locations", JSON.stringify(next))
+        .then(() => alert("저장완료: from_excluded=" + JSON.stringify(next.from_excluded) + " / to_excluded=" + JSON.stringify(next.to_excluded)))
+        .catch(e => alert("저장실패: " + e.message));
       return next;
     });
   };
