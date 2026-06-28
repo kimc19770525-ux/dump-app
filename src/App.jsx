@@ -2503,26 +2503,24 @@ export default function App() {
       try { const mat = await window.storage.get("dump_materials"); if (mat?.value) setMaterialsState(JSON.parse(mat.value)); } catch {}
       // 상·하차지 목록은 기사/관리자 모두 불러옴
       try {
-        // Supabase에서 직접 조회 (localStorage 캐시 우선순위 문제 회피)
+        // id=6 레코드를 직접 fetch로 조회
         const locRes = await fetch(
-          `${window.sbRecords.url}/rest/v1/records?type=eq.settings&date=eq.dump_locations&select=data&order=id.desc&limit=1`,
+          `${window.sbRecords.url}/rest/v1/records?id=eq.6&select=data`,
           { headers: { apikey: window.sbRecords.key, Authorization: `Bearer ${window.sbRecords.key}` } }
         );
         const locArr = await locRes.json();
-        const locVal = Array.isArray(locArr) && locArr.length > 0 ? locArr[0].data?.value : null;
-        if (locVal) {
-          let parsed;
-          try {
-            parsed = typeof locVal === "string" ? JSON.parse(locVal) : locVal;
-          } catch { parsed = {}; }
+        const locData = Array.isArray(locArr) && locArr.length > 0 ? locArr[0].data : null;
+        if (locData && locData.loc_from_excluded !== undefined) {
+          // 새 방식으로 저장된 경우
+          const parse = s => { try { return JSON.parse(s||"[]"); } catch { return []; } };
           setLocationsState({
-            from: parsed.from || [],
-            to: parsed.to || [],
-            from_excluded: parsed.from_excluded || [],
-            to_excluded: parsed.to_excluded || [],
+            from: parse(locData.loc_from),
+            to:   parse(locData.loc_to),
+            from_excluded: parse(locData.loc_from_excluded),
+            to_excluded:   parse(locData.loc_to_excluded),
           });
         } else {
-          // Supabase에 없으면 localStorage 폴백
+          // 기존 window.storage 방식 폴백
           const l = await window.storage.get("dump_locations");
           if (l?.value) {
             const parsed = JSON.parse(l.value);
@@ -2607,19 +2605,18 @@ export default function App() {
   const updateLocations = fn => {
     setLocationsState(prev => {
       const next = typeof fn === "function" ? fn(prev) : fn;
-      // localStorage에도 저장 (빠른 로드용)
-      try { localStorage.setItem("sb_dump_locations", JSON.stringify(next)); } catch {}
-      // Supabase에 직접 upsert (id=6 고정, data.value에 JSON 저장)
+      // upsert로 저장 - data 컬럼에 전체 record가 저장됨
       window.sbRecords.upsert({
         id: 6,
         type: "settings",
         date: "dump_locations",
         vehicle: "",
-        work: { material: "", qty: 0, unit: "" },
         status: "settings",
+        loc_from: JSON.stringify(next.from||[]),
+        loc_to: JSON.stringify(next.to||[]),
+        loc_from_excluded: JSON.stringify(next.from_excluded||[]),
+        loc_to_excluded: JSON.stringify(next.to_excluded||[]),
         savedAt: new Date().toISOString(),
-        key: "dump_locations",
-        value: JSON.stringify(next),
       }).catch(()=>{});
       return next;
     });
