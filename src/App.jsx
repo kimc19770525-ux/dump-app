@@ -2510,14 +2510,15 @@ export default function App() {
         );
         const locArr = await locRes.json();
         const locData = Array.isArray(locArr) && locArr.length > 0 ? locArr[0].data : null;
-        if (locData && locData.loc_from_excluded !== undefined) {
+        const locWork = locData?.work || locData;
+        if (locWork && locWork.loc_from_excluded !== undefined) {
           // 새 방식으로 저장된 경우
           const parse = s => { try { return JSON.parse(s||"[]"); } catch { return []; } };
           setLocationsState({
-            from: parse(locData.loc_from),
-            to:   parse(locData.loc_to),
-            from_excluded: parse(locData.loc_from_excluded),
-            to_excluded:   parse(locData.loc_to_excluded),
+            from: parse(locWork.loc_from),
+            to:   parse(locWork.loc_to),
+            from_excluded: parse(locWork.loc_from_excluded),
+            to_excluded:   parse(locWork.loc_to_excluded),
           });
         } else {
           // 기존 window.storage 방식 폴백
@@ -2562,18 +2563,16 @@ export default function App() {
     await window.sbRecords.upsert(rec);
     // 상·하차지 자동 목록 추가
     if (rec.type === "report") {
-      setLocationsState(prev => {
+      updateLocations(prev => {
         let next = prev;
         const exFrom = prev.from_excluded || [];
         const exTo   = prev.to_excluded   || [];
-        // excluded에 없는 경우만 추가
         if (rec.from && !exFrom.includes(rec.from) && !prev.from?.includes(rec.from)) {
           next = { ...next, from: [...(next.from||[]), rec.from] };
         }
         if (rec.to && !exTo.includes(rec.to) && !next.to?.includes(rec.to)) {
           next = { ...next, to: [...(next.to||[]), rec.to] };
         }
-        if (next !== prev) window.storage.set("dump_locations", JSON.stringify(next)).catch(()=>{});
         return next;
       });
     }
@@ -2610,12 +2609,14 @@ export default function App() {
         id: 6,
         type: "settings",
         date: "dump_locations",
-        vehicle: "",
+        vehicle: "SETTINGS",
         status: "settings",
-        loc_from: JSON.stringify(next.from||[]),
-        loc_to: JSON.stringify(next.to||[]),
-        loc_from_excluded: JSON.stringify(next.from_excluded||[]),
-        loc_to_excluded: JSON.stringify(next.to_excluded||[]),
+        work: {
+          loc_from: JSON.stringify(next.from||[]),
+          loc_to: JSON.stringify(next.to||[]),
+          loc_from_excluded: JSON.stringify(next.from_excluded||[]),
+          loc_to_excluded: JSON.stringify(next.to_excluded||[]),
+        },
         savedAt: new Date().toISOString(),
       }).catch(()=>{});
       return next;
