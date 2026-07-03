@@ -387,27 +387,38 @@ function ReportForm({ vehicles, locationHints, locations, records, onSave, mater
     setTrips(t => t.map((tr, idx) => idx === i ? { ...tr, work: val } : tr));
   };
 
-  const submit = () => {
+  const [submitting, setSubmitting] = useState(false);
+  const submit = async () => {
     if (!vehicle) { setErr("차량번호를 선택해주세요."); return; }
     const invalid = trips.some(t => !t.from || !t.to || !t.work.material || !t.work.qty);
     if (invalid) { setErr("모든 현장의 상·하차지, 품목, 수량을 입력해주세요."); return; }
     setErr("");
+    setSubmitting(true);
     const now = Date.now();
-    trips.forEach((t, i) => {
-      onSave({
-        type: "report", date, vehicle,
-        from: t.from, to: t.to, work: t.work,
-        memo: i === 0 ? memo : "",
-        status: "pending",
-        id: now + i, savedAt: new Date().toISOString()
-      });
-    });
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2500);
-    // 제출 완료 후 임시저장 초기화
-    try { localStorage.removeItem("dump_draft"); } catch {}
-    setVehicleRaw(""); setTripsRaw([{ ...emptyTrip }]); setMemoRaw("");
-    saveDraft(today(), "", [{ ...emptyTrip }], "");
+    try {
+      // 각 현장을 순서대로 저장하고 전부 완료될 때까지 대기
+      for (let i = 0; i < trips.length; i++) {
+        const t = trips[i];
+        await onSave({
+          type: "report", date, vehicle,
+          from: t.from, to: t.to, work: t.work,
+          memo: i === 0 ? memo : "",
+          status: "pending",
+          id: now + i, savedAt: new Date().toISOString()
+        });
+      }
+      // 전부 저장 성공한 경우에만 완료 처리
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2500);
+      try { localStorage.removeItem("dump_draft"); } catch {}
+      setVehicleRaw(""); setTripsRaw([{ ...emptyTrip }]); setMemoRaw("");
+      saveDraft(today(), "", [{ ...emptyTrip }], "");
+    } catch (e) {
+      // 저장 실패 - 입력 내용 유지, 에러 표시
+      setErr("⚠️ 저장 실패! 신호가 약할 수 있습니다. 잠시 후 다시 제출해주세요.");
+      alert("일보 저장에 실패했습니다.\n입력 내용은 그대로 남아있으니 신호가 잘 잡히는 곳에서 다시 제출해주세요.");
+    }
+    setSubmitting(false);
   };
 
   // 품목 선택 상태 (행별)
@@ -520,8 +531,8 @@ function ReportForm({ vehicles, locationHints, locations, records, onSave, mater
             style={{ width:"100%", background:C.card2, border:`1.5px solid ${C.border}`, borderRadius:10, padding:"10px 12px", color:C.text, fontSize:14, resize:"none", outline:"none" }} />
         </Field>
         {err && <div style={{ color:C.danger, fontSize:13, marginBottom:10 }}>{err}</div>}
-        <Btn onClick={submit} style={{ width:"100%" }}>
-          {saved ? "✅ 저장 완료!" : `일보 제출 (${trips.length}개 현장)`}
+        <Btn onClick={submit} style={{ width:"100%" }} disabled={submitting}>
+          {submitting ? "📡 저장 중..." : saved ? "✅ 저장 완료!" : `일보 제출 (${trips.length}개 현장)`}
         </Btn>
       </Card>
     </div>
