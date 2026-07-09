@@ -17,11 +17,20 @@ const sb = {
 
   async getAll() {
     try {
-      const res = await fetch(`${SUPABASE_URL}/rest/v1/records?select=*&order=id.desc&limit=5000`, { headers })
-      if (!res.ok) { console.error('getAll error:', res.status, await res.text()); return [] }
-      const rows = await res.json()
-      if (!Array.isArray(rows)) return []
-      return rows.map(r => ({
+      // Supabase 서버는 1회 최대 1000행 제한 → Range 헤더로 페이지네이션해서 전체 조회
+      const all = []
+      const PAGE = 1000
+      for (let offset = 0; offset < 20000; offset += PAGE) {
+        const res = await fetch(`${SUPABASE_URL}/rest/v1/records?select=*&order=id.desc`, {
+          headers: { ...headers, 'Range-Unit': 'items', 'Range': `${offset}-${offset + PAGE - 1}` }
+        })
+        if (!res.ok) { console.error('getAll error:', res.status, await res.text()); break }
+        const rows = await res.json()
+        if (!Array.isArray(rows) || rows.length === 0) break
+        all.push(...rows)
+        if (rows.length < PAGE) break
+      }
+      return all.map(r => ({
         ...r.data,
         id: r.id,
         type: r.type,
