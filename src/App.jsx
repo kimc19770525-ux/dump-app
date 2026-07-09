@@ -1604,14 +1604,9 @@ function DriverScreen({ vehicles, locationHints, locations, records, onSave, onR
 // ════════════════════════════════════════════════════════════
 // 관리자 대시보드
 // ════════════════════════════════════════════════════════════
-function PriceInputModal({ records, customPrices, setCustomPrices, onClose, onConfirm }) {
-  const now = new Date();
-  const y = now.getFullYear(), mo = now.getMonth();
-  const vStart = new Date(y, mo, 1).toISOString().slice(0,10);
-  const vEnd   = new Date(y, mo+1, 0).toISOString().slice(0,10);
-  const periodRecs = records.filter(r => r.type==="report" && r.date>=vStart && r.date<=vEnd && r.status!=="pending");
+function PriceInputModal({ reportRecs, customPrices, setCustomPrices, onClose, onConfirm }) {
   const locSet = {};
-  periodRecs.forEach(r => {
+  reportRecs.forEach(r => {
     const k = (r.from||"")+"||"+(r.to||"");
     if (!locSet[k]) locSet[k] = { from:r.from, to:r.to };
   });
@@ -2577,7 +2572,7 @@ function AdminDash({ records, vehicles, setVehicles, mappings, setMappings, onSa
       }}
     />}
     {showPriceModal && <PriceInputModal
-      records={records}
+      reportRecs={reportRecs}
       customPrices={customPrices}
       setCustomPrices={setCustomPrices}
       onClose={()=>setShowPriceModal(false)}
