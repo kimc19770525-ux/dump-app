@@ -399,9 +399,12 @@ function ReportForm({ vehicles, locationHints, locations, records, onSave, mater
       // 각 현장을 순서대로 저장하고 전부 완료될 때까지 대기
       for (let i = 0; i < trips.length; i++) {
         const t = trips[i];
+        // 상하차지 공백 정규화 (앞뒤/중간 공백 제거해서 같은 현장으로 통일)
+        const normFrom = (t.from || "").replace(/\s+/g, "");
+        const normTo   = (t.to   || "").replace(/\s+/g, "");
         await onSave({
           type: "report", date, vehicle,
-          from: t.from, to: t.to, work: t.work,
+          from: normFrom, to: normTo, work: t.work,
           memo: i === 0 ? memo : "",
           status: "pending",
           id: now + i, savedAt: new Date().toISOString()
@@ -1664,8 +1667,8 @@ function AdminAddModal({ vehicles, locations, materials, onClose, onAdd }) {
   const allFrom = [...new Set([...(locations?.from||[])])].filter(x => !exFrom.includes(x)).sort();
   const allTo   = [...new Set([...(locations?.to||[])])].filter(x => !exTo.includes(x)).sort();
 
-  const actualFrom = from === "__direct__" ? fromDirect.trim() : from;
-  const actualTo   = to   === "__direct__" ? toDirect.trim()   : to;
+  const actualFrom = from === "__direct__" ? fromDirect.replace(/\s+/g,"") : from;
+  const actualTo   = to   === "__direct__" ? toDirect.replace(/\s+/g,"")   : to;
 
   const handleAdd = () => {
     if (!date || !vehicle || !actualFrom || !actualTo || !qty) {
@@ -2036,7 +2039,7 @@ function AdminDash({ records, vehicles, setVehicles, mappings, setMappings, onSa
           // 데이터 행
           groupRows.forEach(row => {
             const ri = detailRowIdx;
-            const day = row.date ? (parseInt(row.date.split("-")[1])+"."+parseInt(row.date.split("-")[2])) : "";
+            const day = row.date ? (parseInt(row.date.split("-")[1])+"-"+String(parseInt(row.date.split("-")[2])).padStart(2,"0")) : "";
             const isM3 = isM3byMat(row.work?.material, row.work?.unit);
             const qty = Number(row.work?.qty)||0;
             setCell("C"+ri, day||"", "s");
@@ -2049,18 +2052,25 @@ function AdminDash({ records, vehicles, setVehicles, mappings, setMappings, onSa
             else { setCell("I"+ri, qty, "n"); setCell("H"+ri, "", "s"); }
             detailRowIdx++;
           });
-          // 소계 행 (노란색) - 수량/m3 숫자만
+          // 소계 행 (노란색) - 수량/m3 SUM 수식으로 합산
           const subRi = detailRowIdx;
+          const dataStartRi = subRi - groupRows.length;
+          const dataEndRi = subRi - 1;
           const yellow = { patternType:"solid", fgColor:{ rgb:"FFFF00" } };
           const yS = { font:{name:"돋움",bold:true,sz:10}, fill:yellow, alignment:{horizontal:"center",vertical:"center"} };
           const yR = { font:{name:"돋움",bold:true,sz:10}, fill:yellow, alignment:{horizontal:"right",vertical:"center"} };
           "CDEFGHIJKL".split("").forEach(c => {
             ws[c+subRi] = { v:"", t:"s", s:yS };
           });
-          if (!g.isM3) {
-            ws["H"+subRi] = { v:g.qty, t:"n", s:yR };
+          if (groupRows.length > 0) {
+            if (!g.isM3) {
+              ws["H"+subRi] = { f:`SUM(H${dataStartRi}:H${dataEndRi})`, t:"n", v:g.qty, s:yR };
+            } else {
+              ws["I"+subRi] = { f:`SUM(I${dataStartRi}:I${dataEndRi})`, t:"n", v:g.qty, s:yR };
+            }
           } else {
-            ws["I"+subRi] = { v:g.qty, t:"n", s:yR };
+            if (!g.isM3) { ws["H"+subRi] = { v:g.qty, t:"n", s:yR }; }
+            else { ws["I"+subRi] = { v:g.qty, t:"n", s:yR }; }
           }
           detailRowIdx++;
         });
