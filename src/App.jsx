@@ -1742,6 +1742,7 @@ function AdminDash({ records, vehicles, setVehicles, mappings, setMappings, onSa
   const _today = new Date(); const _ty = _today.getFullYear(), _tm = String(_today.getMonth()+1).padStart(2,"0"), _td = String(_today.getDate()).padStart(2,"0"); const _todayStr = `${_ty}-${_tm}-${_td}`;
   const [showAddModal, setShowAddModal] = useState(false);
   const [period, setPeriod]         = useState("custom");
+  const [filterVehicle, setFilterVehicle] = useState("");
   const [showPriceModal, setShowPriceModal] = useState(false);
   const [customPrices, setCustomPrices]     = useState({});
   const [customStart, setCustomStart] = useState(_todayStr);
@@ -1803,7 +1804,7 @@ function AdminDash({ records, vehicles, setVehicles, mappings, setMappings, onSa
   const [startD, endD] = getPeriodRange();
 
   const inRange = r => r.date >= startD && r.date <= endD;
-  const reportRecs = records.filter(r => r.type === "report" && inRange(r) && r.status !== "pending");
+  const reportRecs = records.filter(r => r.type === "report" && inRange(r) && r.status !== "pending" && (!filterVehicle || r.vehicle === filterVehicle));
   const repairRecs = records.filter(r => r.type === "repair" && inRange(r));
   const fuelRecs   = records.filter(r => r.type === "fuel"   && inRange(r));
   const advanceRecs   = records.filter(r => r.type === "advance"   && inRange(r));
@@ -2367,6 +2368,14 @@ function AdminDash({ records, vehicles, setVehicles, mappings, setMappings, onSa
           </div>
         )}
         {startD && <div style={{ marginTop: 8, fontSize: 12, color: C.muted }}>📌 {startD} ~ {endD}</div>}
+        <div style={{ marginTop: 12, paddingTop: 12, borderTop: `1px solid ${C.border}` }}>
+          <div style={{ fontSize: 13, color: C.muted, marginBottom: 6 }}>🚛 차량 조회 (선택)</div>
+          <select value={filterVehicle} onChange={e => setFilterVehicle(e.target.value)}
+            style={{ width: "100%", background: C.card2, border: `1.5px solid ${C.border}`, borderRadius: 8, padding: "8px 10px", color: C.text, fontSize: 14, outline: "none" }}>
+            <option value="">전체 차량</option>
+            {vehicles.map(v => <option key={v} value={v}>{v}</option>)}
+          </select>
+        </div>
       </Card>
 
       {/* 내부 탭 */}
@@ -2731,10 +2740,9 @@ export default function App() {
   };
 
   const refreshRecords = async () => {
-    setLoading(true);
+    // 초기 로딩이 아닌 갱신이므로 loading 화면을 띄우지 않음 (AdminDash 마운트 유지 → 조회 조건 보존)
     const recs = await window.sbRecords.getAll();
     setRecords(recs.filter(r => r.type !== 'settings'));
-    setLoading(false);
   };
 
   const updateVehicles = fn => {
