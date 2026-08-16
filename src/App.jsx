@@ -1,6 +1,6 @@
 import React, { useState, useEffect, Component } from "react";
 import * as XLSX from "xlsx";
-import ExcelJS from "exceljs";
+import ExcelJS from "exceljs/dist/exceljs.min.js";
 import { saveAs } from "file-saver";
 
 export class ErrorBoundary extends Component {
