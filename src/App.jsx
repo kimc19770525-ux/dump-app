@@ -1935,6 +1935,9 @@ function AdminDash({ records, vehicles, setVehicles, mappings, setMappings, onSa
         const tmplWs = tmplWb.Sheets[tmplWb.SheetNames[0]];
         const ws = JSON.parse(JSON.stringify(tmplWs)); // deep copy
 
+        // 거래명세서 제목 (돋움 18pt bold)
+        ws["C1"] = { ...ws["C1"], v: "거 래 명 세 서", t:"s", s: { font:{name:"돋움",sz:18,bold:true}, alignment:{horizontal:"center"} } };
+
         // 날짜 (Excel 시리얼)
         const eDateObj = new Date(eD + "T00:00:00");
         const serial = Math.round((eDateObj - new Date(1899,11,30)) / 86400000);
@@ -1943,11 +1946,26 @@ function AdminDash({ records, vehicles, setVehicles, mappings, setMappings, onSa
         // 업체명
         ws["E5"] = { ...ws["E5"], v: client, t:"s" };
 
-        // 데이터행 초기화
+        // 헤더/데이터/계행에 테두리 명시적 적용 (템플릿 스타일 유실 방지)
+        const thinBB = { style: "thin", color: { rgb: "000000" } };
+        const gBorder = { top: thinBB, bottom: thinBB, left: thinBB, right: thinBB };
+        const applyBorder = (addr) => {
+          if (ws[addr]) ws[addr] = { ...ws[addr], s: { ...(ws[addr].s||{}), border: gBorder } };
+          else ws[addr] = { v:"", t:"s", s:{ border: gBorder } };
+        };
+        // 헤더행(11)
+        "CDEFGHIJKL".split("").forEach(c => applyBorder(c + "11"));
+        // 계/공급가/총계 행(34~36)
+        for (let ri=34; ri<=36; ri++) {
+          "CDEFGHIJKL".split("").forEach(c => applyBorder(c + ri));
+        }
+
+        // 데이터행 초기화 (스타일에 테두리 명시 유지)
         for (let ri=DS; ri<=DE; ri++) {
           "CDEFGHIJKL".split("").forEach(c => {
             const addr = c + ri;
-            if (ws[addr]) ws[addr] = { ...ws[addr], v:"", t:"s", f:undefined };
+            if (ws[addr]) ws[addr] = { ...ws[addr], v:"", t:"s", f:undefined, s: { ...(ws[addr].s||{}), border: gBorder } };
+            else ws[addr] = { v:"", t:"s", s:{ border: gBorder } };
           });
         }
 
