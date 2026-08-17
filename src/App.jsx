@@ -1914,14 +1914,17 @@ function AdminDash({ records, vehicles, setVehicles, mappings, setMappings, onSa
 
       clientList.forEach(([client, rows]) => {
         const ws = wb.addWorksheet(client.slice(0,31));
-        ws.properties.defaultRowHeight = 18;
+        ws.properties.defaultRowHeight = 20;
         ws.columns = [
-          {width:3},{width:3},{width:10},{width:10},{width:14},{width:14},
+          {width:3},{width:3},{width:10},{width:12},{width:14},{width:14},
           {width:10},{width:8},{width:8},{width:10},{width:12},{width:10}
         ];
+        // 모든 행에 명시적으로 기본 높이 지정 (엑셀 프로그램별 기본값 차이 방지)
+        for (let r=1; r<=200; r++) { ws.getRow(r).height = 20; }
 
         // ── 제목 ──
         ws.mergeCells("C1:L1");
+        ws.getRow(1).height = 32;
         const titleCell = ws.getCell("C1");
         titleCell.value = "거 래 명 세 서";
         titleCell.font = { name:"돋움", size:18, bold:true };
@@ -2160,6 +2163,7 @@ function AdminDash({ records, vehicles, setVehicles, mappings, setMappings, onSa
           {width:13},{width:16.75},{width:6.875},{width:6.5},
           {width:6.5},{width:7.5},{width:8.375},{width:9}
         ];
+        for (let r=1; r<=200; r++) { ws.getRow(r).height = 20; }
 
         // 헤더행
         const headers = ["매입처","","날자","","상차지","하차지","품명","수량","m3","시간/㎥","운반단가","지급운반비"];
