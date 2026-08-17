@@ -1908,32 +1908,39 @@ function AdminDash({ records, vehicles, setVehicles, mappings, setMappings, onSa
       const doubleBorder = { top:{style:"double"}, bottom:{style:"double"}, left:{style:"double"}, right:{style:"double"} };
       const centerV = { vertical: "middle", horizontal: "center" };
       const rightV = { vertical: "middle", horizontal: "right" };
-      const leftV = { vertical: "middle" };
+      const leftV = { vertical: "middle", horizontal: "left", indent: 1 };
 
       const wb = new ExcelJS.Workbook();
 
       clientList.forEach(([client, rows]) => {
         const ws = wb.addWorksheet(client.slice(0,31));
         ws.properties.defaultRowHeight = 20;
+        // 참조 양식(7월은석.xlsx)과 동일한 열 너비
         ws.columns = [
-          {width:3},{width:3},{width:10},{width:12},{width:14},{width:14},
-          {width:10},{width:8},{width:8},{width:10},{width:12},{width:10}
+          {width:3},{width:3},{width:6},{width:6},{width:12.1},{width:9},
+          {width:6},{width:7.4},{width:6},{width:9.9},{width:9},{width:12.25}
         ];
-        // 모든 행에 명시적으로 기본 높이 지정 (엑셀 프로그램별 기본값 차이 방지)
-        for (let r=1; r<=200; r++) { ws.getRow(r).height = 20; }
+        // 참조 양식과 동일한 행 높이 패턴
+        for (let r=1; r<=200; r++) { ws.getRow(r).height = 20.1; }
+        ws.getRow(4).height = 5.1;
+        ws.getRow(6).height = 5.1;
+        ws.getRow(12).height = 2.25;
+        for (let r=13; r<=38; r++) { ws.getRow(r).height = 15.75; }
 
         // ── 제목 ──
         ws.mergeCells("C1:L1");
-        ws.getRow(1).height = 32;
+        ws.getRow(1).height = 22.5;
         const titleCell = ws.getCell("C1");
         titleCell.value = "거 래 명 세 서";
         titleCell.font = { name:"돋움", size:18, bold:true };
         titleCell.alignment = centerV;
 
-        // ── 상단 정보 ──
+        // ── 상단 정보 (참조양식과 동일한 병합 구조) ──
+        ws.mergeCells("E3:F3");
         ws.getCell("C3").value = "일        자:";
         ws.getCell("E3").value = new Date(eD + "T00:00:00");
         ws.getCell("E3").numFmt = "yyyy-mm-dd";
+        ws.mergeCells("I3:J3");
         ws.getCell("I3").value = "공 급 자:";
         ws.getCell("I3").font = { name:"맑은 고딕", bold:true };
         ws.getCell("K3").value = "㈜ 다 솔 중 기  ";
@@ -1942,12 +1949,26 @@ function AdminDash({ records, vehicles, setVehicles, mappings, setMappings, onSa
         ws.getCell("C5").value = "공급받는자:";
         ws.getCell("E5").value = client;
         ws.getCell("E5").font = { name:"맑은 고딕", bold:true, size:12 };
+        ws.mergeCells("I5:K5");
         ws.getCell("I5").value = "759-88-00944";
         ws.getCell("L5").value = "최 기 희";
 
+        ws.mergeCells("E7:F7");
         ws.getCell("C7").value = "금        액:";
+        ws.getCell("E7").value = { formula: "H42+K42-K42" }; // 공급가+부가세 표시용, 실제는 총계 참조
+        ws.mergeCells("I7:L7");
         ws.getCell("I7").value = "인천시 서구 청라에메랄드로 112 웰카운티 226동 1602호";
+        ws.mergeCells("I8:L8");
         ws.getCell("I8").value = "T:032-564-2306  F:032-566-2306";
+
+        // I3:L8 영역 이중선(double) 테두리 박스 (참조양식과 동일)
+        const doubleB = { style: "double" };
+        for (let r=3; r<=8; r++) {
+          const iCell = ws.getCell("I"+r);
+          const lCell = ws.getCell("L"+r);
+          iCell.border = { ...(iCell.border||{}), left: doubleB, top: r===3?doubleB:undefined, bottom: r===8?doubleB:undefined };
+          lCell.border = { ...(lCell.border||{}), right: doubleB, top: r===3?doubleB:undefined, bottom: r===8?doubleB:undefined };
+        }
 
         ws.getCell("C9").value = "청구내역:";
 
@@ -1957,7 +1978,7 @@ function AdminDash({ records, vehicles, setVehicles, mappings, setMappings, onSa
           const col = String.fromCharCode(67 + i); // C부터
           const cell = ws.getCell(col + "11");
           cell.value = h;
-          cell.font = { name:"돋움", size:10, bold:true };
+          cell.font = { name:"돋움", size:9, bold:true };
           cell.alignment = centerV;
           cell.border = thinBorder;
         });
@@ -1992,18 +2013,34 @@ function AdminDash({ records, vehicles, setVehicles, mappings, setMappings, onSa
           ...sortGroup(allGroups.filter(g => g.isM3))
         ];
 
-        // ── 갑지 데이터행(12~33) ──
-        const DS = 12, DE = 33;
+        // ── 갑지 데이터행(13~38, 12행은 구분선) ──
+        // 참조 양식: C/D/J/K/L열은 항상 테두리, E/F/G/H/I열(상차지~㎥)은 테두리 없음
+        const DS = 13, DE = 38;
+        ws.getRow(12).height = 2.25;
+        // 먼저 전체 행에 기본 서식(C/D/J/K/L만 테두리) 세팅
+        for (let ri=DS; ri<=DE; ri++) {
+          "CD".split("").forEach(c => {
+            const cell = ws.getCell(c+ri);
+            cell.border = thinBorder;
+            cell.font = { name:"돋움", size:10 };
+          });
+          "EFGHI".split("").forEach(c => {
+            const cell = ws.getCell(c+ri);
+            cell.font = { name:"맑은 고딕", size:11 };
+            cell.alignment = leftV;
+          });
+          "JKL".split("").forEach(c => {
+            const cell = ws.getCell(c+ri);
+            cell.border = thinBorder;
+            cell.font = { name:"돋움", size:10 };
+          });
+        }
         groups.forEach((g, idx) => {
           if (idx >= DE-DS+1) return;
           const ri = DS + idx;
-          const setC = (col, val, numFmt) => {
+          const setC = (col, val) => {
             const cell = ws.getCell(col+ri);
             cell.value = val;
-            cell.font = { name:"돋움", size:10 };
-            cell.alignment = leftV;
-            cell.border = thinBorder;
-            if (numFmt) cell.numFmt = numFmt;
           };
           setC("D", idx+1);
           setC("E", g.from||"");
@@ -2013,59 +2050,68 @@ function AdminDash({ records, vehicles, setVehicles, mappings, setMappings, onSa
           else setC("I", g.qty);
           const kCell = ws.getCell("K"+ri);
           kCell.value = { formula: (g.isM3?"I":"H")+ri+"*J"+ri };
-          kCell.font = { name:"돋움", size:10 };
-          kCell.border = thinBorder;
           kCell.alignment = rightV;
-          // 나머지 빈 셀도 테두리
-          "CJL".split("").forEach(c => { ws.getCell(c+ri).border = thinBorder; });
         });
-        // 빈 데이터행도 테두리(사용 안한 행 포함)
-        for (let ri=DS; ri<=DE; ri++) {
+
+        // ── 계행(39:40 병합) / 공급가·부가세(41:42) / 총계(43) — 참조양식과 동일한 구조 ──
+        ws.mergeCells("C39:G40");
+        ws.getCell("C39").value = "  계";
+        ws.getCell("H39").value = { formula: `SUM(H${DS}:H${DE})` };
+        ws.getCell("I39").value = { formula: `SUBTOTAL(9,I${DS}:I${DE})` };
+        ws.mergeCells("K39:L39");
+        ws.getCell("K39").value = { formula: `SUM(K${DS}:K${DE})` };
+        for (let ri=39; ri<=40; ri++) {
           "CDEFGHIJKL".split("").forEach(c => {
             const cell = ws.getCell(c+ri);
-            if (!cell.border) cell.border = thinBorder;
-          });
-        }
-
-        // ── 계행(34) / 공급가·부가세(35) / 총계(36) ──
-        ws.getCell("C34").value = "  계";
-        ws.getCell("H34").value = { formula: `SUM(H${DS}:H${DE})` };
-        ws.getCell("I34").value = { formula: `SUM(I${DS}:I${DE})` };
-        ws.getCell("K34").value = { formula: `SUM(K${DS}:K${DE})` };
-
-        ws.getCell("C35").value = "공급가/부가세";
-        ws.getCell("H35").value = { formula: "K34-K36" };
-        ws.getCell("K35").value = { formula: "H37*0.1" };
-
-        ws.getCell("C36").value = "총    계";
-        ws.getCell("H36").value = { formula: "SUM(H34:H35)" };
-        ws.getCell("I36").value = { formula: "SUM(I34:I35)" };
-        ws.getCell("K36").value = { formula: "H37+K37" };
-
-        for (let ri=34; ri<=36; ri++) {
-          "CDEFGHIJKL".split("").forEach(c => {
-            const cell = ws.getCell(c+ri);
-            cell.font = { name:"돋움", size:10, bold: ri===36 };
+            cell.font = { name:"돋움", size:10 };
             cell.border = thinBorder;
             cell.alignment = c==="C" ? leftV : rightV;
           });
         }
 
-        ws.getCell("C37").value = "담당자확인";
-        ws.getCell("G37").value = "* 아래 계좌로 입금부탁드립니다 *";
-        ws.getCell("C38").value = "결재계좌번호: 955-024478-01-011 기업은행 ㈜ 다솔중기";
-        ws.getCell("C39").value = { formula: "E5" };
+        ws.mergeCells("C41:G41");
+        ws.getCell("C41").value = "공급가/부가세";
+        ws.mergeCells("H41:J41");
+        ws.getCell("H41").value = { formula: "K39-K41" };
+        ws.mergeCells("K41:L41");
+        ws.getCell("K41").value = { formula: "H41*0.1" };
 
-        // ── 청구 리스트 제목(45) ──
-        ws.getCell("C45").value = `( ${mo}월 청구 리스트)`;
-        ws.getCell("C45").font = { name:"돋움", size:10, bold:true };
+        ws.mergeCells("C42:G42");
+        ws.getCell("C42").value = "총    계";
+        ws.getCell("H42").value = { formula: "SUM(H39:H40)" };
+        ws.getCell("I42").value = { formula: "SUM(I39:I40)" };
+        ws.mergeCells("K42:L42");
+        ws.getCell("K42").value = { formula: "H41+K41" };
 
-        // ── 상세 헤더(46) ──
+        for (let ri=41; ri<=42; ri++) {
+          "CDEFGHIJKL".split("").forEach(c => {
+            const cell = ws.getCell(c+ri);
+            cell.font = { name:"돋움", size:10, bold: ri===42 };
+            cell.border = thinBorder;
+            cell.alignment = c==="C" ? leftV : rightV;
+          });
+        }
+
+        ws.mergeCells("C43:E44");
+        ws.getCell("C43").value = "담당자확인";
+        ws.mergeCells("G43:L44");
+        ws.getCell("G43").value = "* 아래 계좌로 입금부탁드립니다 *";
+        ws.mergeCells("C45:L45");
+        ws.getCell("C45").value = "결재계좌번호: 955-024478-01-011 기업은행 ㈜ 다솔중기";
+
+        // ── 청구 리스트 제목 ──
+        ws.mergeCells("C48:L48");
+        ws.getCell("C48").value = client;
+        ws.mergeCells("C49:L49");
+        ws.getCell("C49").value = `( ${mo}월 청구 리스트)`;
+        ws.getCell("C49").font = { name:"돋움", size:10, bold:true };
+
+        // ── 상세 헤더(50) ──
         headers.forEach((h, i) => {
           const col = String.fromCharCode(67 + i);
-          const cell = ws.getCell(col + "46");
+          const cell = ws.getCell(col + "50");
           cell.value = h;
-          cell.font = { name:"돋움", size:10, bold:true };
+          cell.font = { name:"돋움", size:9 };
           cell.alignment = centerV;
           cell.border = thinBorder;
         });
@@ -2084,38 +2130,45 @@ function AdminDash({ records, vehicles, setVehicles, mappings, setMappings, onSa
           detailRows.push({g, groupRows});
         });
 
-        let ri = 47;
+        let ri = 51;
         detailRows.forEach(({g, groupRows}) => {
           const dataStartRi = ri;
           groupRows.forEach(row => {
             const day = row.date ? (parseInt(row.date.split("-")[1])+"-"+String(parseInt(row.date.split("-")[2])).padStart(2,"0")) : "";
             const isM3 = isM3byMat(row.work?.material, row.work?.unit);
             const qty = Number(row.work?.qty)||0;
-            const setC = (col, val) => {
+            const setC = (col, val, font) => {
               const cell = ws.getCell(col+ri);
               cell.value = val;
-              cell.font = { name:"돋움", size:10 };
+              cell.font = font || { name:"맑은 고딕", size:11 };
               cell.alignment = leftV;
               cell.border = thinBorder;
             };
-            setC("C", day||"");
-            setC("D", row.vehicle||"");
+            const dj = { name:"돋움", size:11 };
+            setC("C", day||"", dj);
+            setC("D", row.vehicle||"", dj);
             setC("E", row.from||"");
             setC("F", row.to||"");
             setC("G", row.work?.material||"");
             if (!isM3) { setC("H", qty); setC("I", ""); }
             else { setC("I", qty); setC("H", ""); }
-            "JKL".split("").forEach(c => { ws.getCell(c+ri).border = thinBorder; });
+            "JKL".split("").forEach(c => { const cell = ws.getCell(c+ri); cell.font = dj; cell.border = thinBorder; });
             ri++;
           });
           const dataEndRi = ri - 1;
-          // 소계 행 (노란색)
-          "CDEFGHIJKL".split("").forEach(c => {
+          // 소계 행 (참조양식과 동일: C~H열 초록색, I~L열 무색)
+          "CDEFGH".split("").forEach(c => {
             const cell = ws.getCell(c+ri);
             cell.value = "";
             cell.font = { name:"돋움", size:10, bold:true };
-            cell.fill = { type:"pattern", pattern:"solid", fgColor:{argb:"FFFFFF00"} };
-            cell.alignment = c==="H"||c==="I" ? rightV : centerV;
+            cell.fill = { type:"pattern", pattern:"solid", fgColor:{argb:"FF92D050"} };
+            cell.alignment = c==="H" ? rightV : centerV;
+            cell.border = thinBorder;
+          });
+          "IJKL".split("").forEach(c => {
+            const cell = ws.getCell(c+ri);
+            cell.font = { name:"돋움", size:10, bold:true };
+            cell.alignment = c==="I" ? rightV : centerV;
             cell.border = thinBorder;
           });
           if (groupRows.length > 0) {
@@ -2152,7 +2205,7 @@ function AdminDash({ records, vehicles, setVehicles, mappings, setMappings, onSa
       const thinBorder = { top:{style:"thin"}, bottom:{style:"thin"}, left:{style:"thin"}, right:{style:"thin"} };
       const centerV = { vertical:"middle", horizontal:"center" };
       const rightV = { vertical:"middle", horizontal:"right" };
-      const leftV = { vertical:"middle" };
+      const leftV = { vertical:"middle", horizontal:"left", indent: 1 };
 
       const wb = new ExcelJS.Workbook();
 
@@ -2163,7 +2216,7 @@ function AdminDash({ records, vehicles, setVehicles, mappings, setMappings, onSa
           {width:13},{width:16.75},{width:6.875},{width:6.5},
           {width:6.5},{width:7.5},{width:8.375},{width:9}
         ];
-        for (let r=1; r<=200; r++) { ws.getRow(r).height = 20; }
+        for (let r=1; r<=200; r++) { ws.getRow(r).height = 22; }
 
         // 헤더행
         const headers = ["매입처","","날자","","상차지","하차지","품명","수량","m3","시간/㎥","운반단가","지급운반비"];
