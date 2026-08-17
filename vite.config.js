@@ -1,18 +1,20 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
+import path from 'path'
 
 export default defineConfig({
   plugins: [react()],
   resolve: {
     alias: {
-      // exceljs가 참조하는 Node 전용 모듈을 브라우저에서 무력화
-      fs: 'exceljs/dist/es5/browser',
+      // exceljs의 Node 전용 진입점 대신 브라우저용 빌드를 사용
+      'exceljs': path.resolve(__dirname, 'node_modules/exceljs/dist/exceljs.min.js'),
     },
   },
   define: {
     global: 'globalThis',
   },
   optimizeDeps: {
+    include: ['exceljs'],
     esbuildOptions: {
       define: {
         global: 'globalThis',
