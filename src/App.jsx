@@ -1,7 +1,20 @@
 import React, { useState, useEffect, Component } from "react";
-import * as XLSX from "xlsx";
-import ExcelJS from "exceljs/dist/exceljs.min.js";
-import { saveAs } from "file-saver";
+import ExcelJS from "exceljs";
+
+// file-saver 대체: 순수 브라우저 API로 파일 다운로드
+function saveAs(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.style.display = "none";
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => {
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }, 500);
+}
 
 export class ErrorBoundary extends Component {
   constructor(props) { super(props); this.state = { error: null }; }
@@ -1858,37 +1871,6 @@ function AdminDash({ records, vehicles, setVehicles, mappings, setMappings, onSa
     const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = filename; a.click();
   };
 
-  // xlsx 헬퍼
-  const xlsxDl = (wb, filename) => {
-    // XLSX imported
-    try {
-      const wbout = XLSX.write(wb, { bookType: "xlsx", type: "base64", cellStyles: true });
-      // base64 data URI 방식 — 삼성 브라우저 포함 모바일 호환
-      const uri = "data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64," + wbout;
-      const a = document.createElement("a");
-      a.href = uri;
-      a.download = filename;
-      a.style.display = "none";
-      document.body.appendChild(a);
-      a.click();
-      setTimeout(() => document.body.removeChild(a), 500);
-    } catch(e) {
-      alert("다운로드 실패: " + e.message);
-    }
-  };
-
-  const cellStyle = (bold, align, color, bgColor, border) => ({
-    font: { name: "돋움", sz: 10, bold: !!bold, color: color ? { rgb: color } : undefined },
-    alignment: { horizontal: align || "left", vertical: "center", wrapText: true },
-    fill: bgColor ? { fgColor: { rgb: bgColor }, patternType: "solid" } : undefined,
-    border: border ? {
-      top: { style: "thin", color: { rgb: "CCCCCC" } },
-      bottom: { style: "thin", color: { rgb: "CCCCCC" } },
-      left: { style: "thin", color: { rgb: "CCCCCC" } },
-      right: { style: "thin", color: { rgb: "CCCCCC" } }
-    } : undefined
-  });
-
   // ── 업체별 청구서 xlsx — 템플릿 복사 방식 ──────────────────
   const downloadByClient = async (closingType) => {
     let sD, eD;
@@ -2154,11 +2136,7 @@ function AdminDash({ records, vehicles, setVehicles, mappings, setMappings, onSa
   };
 
   // ── 기사별 정산서 xlsx — 5623/6821/6957 양식 그대로 ──────────
-  const downloadByVehicle = (customPrices = {}) => {
-    // XLSX imported
-    
-
-    // 기사정산: 관리자 화면에서 설정한 날짜 범위 사용
+  const downloadByVehicle = async (customPrices = {}) => {
     const [vStartD, vEndD] = getPeriodRange();
     const inVRange = r => r.date && r.date >= vStartD && r.date <= vEndD;
     const vReportRecs = records.filter(r => r.type === "report" && inVRange(r) && r.status !== "pending");
@@ -2167,85 +2145,91 @@ function AdminDash({ records, vehicles, setVehicles, mappings, setMappings, onSa
     vReportRecs.forEach(r => { if (!byVehicle[r.vehicle]) byVehicle[r.vehicle] = []; byVehicle[r.vehicle].push(r); });
     if (Object.keys(byVehicle).length === 0) { alert("정산할 일보가 없습니다."); return; }
 
-    const thin = { style: "thin", color: { rgb: "000000" } };
-    const bdr = { top: thin, bottom: thin, left: thin, right: thin };
-    const SB = (bold, align, sz) => ({
-      font: { name: "돋움", bold: !!bold, sz: sz || 10 },
-      alignment: { horizontal: align || "left", vertical: "center" },
-      border: bdr,
-    });
-    const S = (bold, align, sz) => ({
-      font: { name: "돋움", bold: !!bold, sz: sz || 10 },
-      alignment: { horizontal: align || "left", vertical: "center" },
-    });
-    const C2 = (ws, addr, val, style) => { ws[addr] = { v: val, t: typeof val === "number" ? "n" : "s", s: style }; };
-    const CF = (ws, addr, formula, style) => { ws[addr] = { f: formula, t: "n", s: style }; };
+    try {
+      const thinBorder = { top:{style:"thin"}, bottom:{style:"thin"}, left:{style:"thin"}, right:{style:"thin"} };
+      const centerV = { vertical:"middle", horizontal:"center" };
+      const rightV = { vertical:"middle", horizontal:"right" };
+      const leftV = { vertical:"middle" };
 
-    const wb = XLSX.utils.book_new();
-    const monthStr = `${vStartD} ~ ${vEndD}`;
+      const wb = new ExcelJS.Workbook();
 
-    Object.entries(byVehicle).forEach(([vehicle, rows]) => {
-      // ── 시트1: 작업내역
+      Object.entries(byVehicle).forEach(([vehicle, rows]) => {
+        const ws = wb.addWorksheet(vehicle.slice(0,31));
+        ws.columns = [
+          {width:10},{width:3.75},{width:6.5},{width:6.5},
+          {width:13},{width:16.75},{width:6.875},{width:6.5},
+          {width:6.5},{width:7.5},{width:8.375},{width:9}
+        ];
 
-      const ws1 = {};
-      ws1["!merges"] = [];
-      ws1["!cols"] = [
-        { wch: 10 }, { wch: 3.75 }, { wch: 6.5 }, { wch: 6.5 },
-        { wch: 13 }, { wch: 16.75 }, { wch: 6.875 }, { wch: 6.5 },
-        { wch: 6.5 }, { wch: 7.5 }, { wch: 8.375 }, { wch: 9 }
-      ];
+        // 헤더행
+        const headers = ["매입처","","날자","","상차지","하차지","품명","수량","m3","시간/㎥","운반단가","지급운반비"];
+        headers.forEach((h, i) => {
+          const col = String.fromCharCode(65 + i);
+          const cell = ws.getCell(col + "1");
+          cell.value = h;
+          cell.font = { name:"돋움", size:10, bold:true };
+          cell.alignment = centerV;
+          cell.border = thinBorder;
+        });
 
-      // 헤더행
-      C2(ws1, "A1", "매입처", SB(true, "center"));
-      C2(ws1, "C1", "날자", SB(true, "center"));
-      C2(ws1, "D1", "", SB(true, "center"));
-      C2(ws1, "E1", "상차지", SB(true, "center"));
-      C2(ws1, "F1", "하차지", SB(true, "center"));
-      C2(ws1, "G1", "품명", SB(true, "center"));
-      C2(ws1, "H1", "수량", SB(true, "center"));
-      C2(ws1, "I1", "m3", SB(true, "center"));
-      C2(ws1, "J1", "시간/㎥", SB(true, "center"));
-      C2(ws1, "K1", "운반단가", SB(true, "center"));
-      C2(ws1, "L1", "지급운반비", SB(true, "center"));
+        // 데이터 행
+        const sortedV = rows.slice().sort((a, b) => a.date.localeCompare(b.date));
+        sortedV.forEach((row, i) => {
+          const r = i + 2;
+          const day = row.date ? Number(row.date.slice(8)) : "";
+          const qty = Number(row.work?.qty) || 0;
+          const isM3 = row.work?.unit === "㎥" || row.work?.unit === "m³";
+          const locKey = (row.from||"") + "||" + (row.to||"");
+          const price = customPrices[locKey] || getPrice(row.from, row.to, row.work?.material) || 0;
 
-      // 데이터 행
-      const sortedV = rows.slice().sort((a, b) => a.date.localeCompare(b.date));
-      sortedV.forEach((row, i) => {
-        const r = i + 2;
-        const day = row.date ? Number(row.date.slice(8)) : "";
-        const qty = Number(row.work?.qty) || 0;
-        const isM3 = row.work?.unit === "㎥" || row.work?.unit === "m³";
-        const locKey = (row.from||"") + "||" + (row.to||"");
-        const price = customPrices[locKey] || getPrice(row.from, row.to, row.work?.material) || 0;
-        C2(ws1, `A${r}`, "", SB(false));
-        C2(ws1, `B${r}`, "", SB(false));
-        ws1[`C${r}`] = { v: day, t: "n", s: SB(false, "right") };
-        C2(ws1, `D${r}`, Number(vehicle) || vehicle, SB(false));
-        C2(ws1, `E${r}`, row.from || "", SB(false));
-        C2(ws1, `F${r}`, row.to || "", SB(false));
-        C2(ws1, `G${r}`, row.work?.material || "", SB(false));
-        if (!isM3 && qty) { ws1[`H${r}`] = { v: qty, t: "n", s: SB(false, "right") }; }
-        else { C2(ws1, `H${r}`, "", SB(false, "right")); }
-        if (isM3 && qty) { ws1[`I${r}`] = { v: qty, t: "n", s: SB(false, "right") }; }
-        else { C2(ws1, `I${r}`, "", SB(false, "right")); }
-        C2(ws1, `J${r}`, "", SB(false, "right"));
-        if (price) { ws1[`K${r}`] = { v: price, t: "n", s: SB(false, "right") }; }
-        else { C2(ws1, `K${r}`, "", SB(false, "right")); }
-        CF(ws1, `L${r}`, `IFERROR(K${r}*H${r},0)+IFERROR(K${r}*I${r},0)`, SB(false, "right"));
+          const setC = (col, val, align) => {
+            const cell = ws.getCell(col+r);
+            cell.value = val;
+            cell.font = { name:"돋움", size:10 };
+            cell.alignment = align || leftV;
+            cell.border = thinBorder;
+          };
+          setC("A", "");
+          setC("B", "");
+          setC("C", day, rightV);
+          setC("D", Number(vehicle) || vehicle);
+          setC("E", row.from || "");
+          setC("F", row.to || "");
+          setC("G", row.work?.material || "");
+          setC("H", (!isM3 && qty) ? qty : "", rightV);
+          setC("I", (isM3 && qty) ? qty : "", rightV);
+          setC("J", "", rightV);
+          setC("K", price || "", rightV);
+          const lCell = ws.getCell("L"+r);
+          lCell.value = { formula: `IFERROR(K${r}*H${r},0)+IFERROR(K${r}*I${r},0)` };
+          lCell.font = { name:"돋움", size:10 };
+          lCell.alignment = rightV;
+          lCell.border = thinBorder;
+        });
+
+        // 합계행
+        const totalRow = sortedV.length + 2;
+        "ABCDEFGHIJK".split("").forEach(c => {
+          const cell = ws.getCell(c+totalRow);
+          cell.font = { name:"돋움", size:10 };
+          cell.border = thinBorder;
+        });
+        ws.getCell("B"+totalRow).value = parseInt(vStartD.split("-")[1]);
+        ws.getCell("D"+totalRow).value = Number(vehicle) || vehicle;
+        const totalCell = ws.getCell("L"+totalRow);
+        totalCell.value = { formula: `SUM(L2:L${totalRow - 1})` };
+        totalCell.font = { name:"돋움", size:10, bold:true };
+        totalCell.alignment = rightV;
+        totalCell.border = thinBorder;
       });
 
-      // 합계행
-      const totalRow = sortedV.length + 2;
-      C2(ws1, `A${totalRow}`, "", SB(false));
-      ws1[`B${totalRow}`] = { v: parseInt(vStartD.split("-")[1]), t: "n", s: SB(false) };
-      C2(ws1, `D${totalRow}`, Number(vehicle) || vehicle, SB(false));
-      CF(ws1, `L${totalRow}`, `SUM(L2:L${totalRow - 1})`, SB(true, "right"));
-
-      ws1["!ref"] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: totalRow, c: 11 } });
-      XLSX.utils.book_append_sheet(wb, ws1, vehicle.slice(0, 31));
-    });
-
-    xlsxDl(wb, `기사정산_${vStartD}_${vEndD}.xlsx`);
+      const buf = await wb.xlsx.writeBuffer();
+      const blob = new Blob([buf], { type: "application/octet-stream" });
+      saveAs(blob, `기사정산_${vStartD}_${vEndD}.xlsx`);
+    } catch(err) {
+      alert("엑셀 생성 오류: " + err.message);
+      console.error(err);
+    }
   };
 
   // 일보 수정 저장
