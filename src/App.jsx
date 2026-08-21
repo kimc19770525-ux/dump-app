@@ -2208,7 +2208,7 @@ function AdminDash({ records, vehicles, setVehicles, mappings, setMappings, onSa
         const safeCommit = (row) => { try { row.commit(); } catch(e) {} };
         const row1 = ws.getRow(1); row1.height = 30; safeCommit(row1);
         for (let r=2; r<=11; r++) { const rr = ws.getRow(r); rr.height = (r===4||r===6) ? 4.6 : 21; safeCommit(rr); }
-        for (let r=12; r<=200; r++) { const rr = ws.getRow(r); rr.height = 15.8; safeCommit(rr); }
+        for (let r=12; r<=200; r++) { const rr = ws.getRow(r); rr.height = 21; safeCommit(rr); }
 
         ws.pageSetup = { paperSize: 9, orientation: "portrait", fitToPage: true, fitToWidth: 1, fitToHeight: 0 };
       });
