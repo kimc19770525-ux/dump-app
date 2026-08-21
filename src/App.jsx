@@ -1980,17 +1980,16 @@ function AdminDash({ records, vehicles, setVehicles, mappings, setMappings, onSa
 
       clientList.forEach(([client, rows]) => {
         const ws = wb.addWorksheet(client.slice(0,31));
-        ws.properties.defaultRowHeight = 24;
+        ws.properties.defaultRowHeight = 21;
         ws.columns = [
           {width:3},{width:3},{width:10},{width:12},{width:14},{width:14},
           {width:10},{width:8},{width:8},{width:10},{width:12},{width:10}
         ];
-        // 모든 행에 명시적으로 기본 높이 지정 (엑셀 프로그램별 기본값 차이 방지)
-        for (let r=1; r<=200; r++) { ws.getRow(r).height = 24; }
+        // 행 높이는 모든 셀 작성이 끝난 뒤 이 함수 맨 끝에서 한 번만 최종 확정한다
+        // (여기서 미리 지정하지 않음 — mergeCells/셀접근이 반복되며 리셋되는 것을 방지)
 
         // ── 제목 ──
         ws.mergeCells("C1:L1");
-        ws.getRow(1).height = 36;
         const titleCell = ws.getCell("C1");
         titleCell.value = "거 래 명 세 서";
         titleCell.font = { name:"돋움", size:20, bold:true };
@@ -2205,9 +2204,10 @@ function AdminDash({ records, vehicles, setVehicles, mappings, setMappings, onSa
           });
         }
         // 1행: 30, 2~9행: 21(단 4,6행은 5), 10행부터: 16(단 11행은 2.5)
-        ws.getRow(1).height = 30;
-        for (let r=2; r<=9; r++) { ws.getRow(r).height = (r===4||r===6) ? 5 : 21; }
-        for (let r=10; r<=200; r++) { ws.getRow(r).height = (r===11) ? 2.5 : 16; }
+        const safeCommit = (row) => { try { row.commit(); } catch(e) {} };
+        const row1 = ws.getRow(1); row1.height = 30; safeCommit(row1);
+        for (let r=2; r<=9; r++) { const rr = ws.getRow(r); rr.height = (r===4||r===6) ? 5 : 21; safeCommit(rr); }
+        for (let r=10; r<=200; r++) { const rr = ws.getRow(r); rr.height = (r===11) ? 2.5 : 16; safeCommit(rr); }
 
         ws.pageSetup = { paperSize: 9, orientation: "portrait", fitToPage: true, fitToWidth: 1, fitToHeight: 0 };
       });
