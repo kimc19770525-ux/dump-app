@@ -1622,35 +1622,106 @@ function DriverScreen({ vehicles, locationHints, locations, records, onSave, onR
 // ════════════════════════════════════════════════════════════
 // 관리자 대시보드
 // ════════════════════════════════════════════════════════════
-function PriceInputModal({ reportRecs, customPrices, setCustomPrices, onClose, onConfirm }) {
+// ════════════════════════════════════════════════════════════
+// 업체 선택 후 청구서(일보마감) 발행 모달
+// ════════════════════════════════════════════════════════════
+function ClientSelectModal({ reportRecs, getClients, onClose, onConfirm }) {
+  const allClients = [...new Set(
+    reportRecs.flatMap(r => {
+      const cs = getClients(r);
+      return cs.length > 0 ? cs : [];
+    })
+  )].sort();
+
+  const [selected, setSelected] = useState([]);
+
+  const toggle = (c) => {
+    setSelected(prev => prev.includes(c) ? prev.filter(x => x !== c) : [...prev, c]);
+  };
+
+  return (
+    <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.7)", zIndex:1000, display:"flex", alignItems:"center", justifyContent:"center", padding:16 }}>
+      <div style={{ background: C.card, borderRadius: 16, padding: 20, width: "100%", maxWidth: 400, maxHeight: "85vh", overflowY: "auto" }}>
+        <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 6, color: C.text }}>📋 일보마감 — 업체 선택</div>
+        <div style={{ fontSize: 12, color: C.muted, marginBottom: 14 }}>
+          선택 안 하면 조회기간 내 전체 업체가 발행됩니다.<br/>
+          특정 업체만 발행하려면 체크하세요.
+        </div>
+
+        {allClients.length === 0 ? (
+          <div style={{ fontSize: 13, color: C.muted, padding: "20px 0", textAlign:"center" }}>조회기간 내 일보가 없습니다.</div>
+        ) : (
+          <div style={{ display:"flex", flexDirection:"column", gap: 8, marginBottom: 16 }}>
+            {allClients.map(c => (
+              <label key={c} style={{ display:"flex", alignItems:"center", gap: 10, background: C.card2, borderRadius: 8, padding: "10px 12px", border: `1px solid ${selected.includes(c) ? C.blue : C.border}`, cursor:"pointer" }}>
+                <input type="checkbox" checked={selected.includes(c)} onChange={()=>toggle(c)} style={{ width:18, height:18 }} />
+                <span style={{ fontSize:14, color: C.text }}>{c}</span>
+              </label>
+            ))}
+          </div>
+        )}
+
+        <div style={{ display:"flex", gap:8 }}>
+          <button onClick={onClose} style={{ flex:1, padding:12, borderRadius:10, background:C.border, border:"none", color:C.text, fontSize:14, cursor:"pointer" }}>취소</button>
+          <button onClick={()=>onConfirm(selected)} style={{ flex:2, padding:12, borderRadius:10, background:C.blue, border:"none", color:"#fff", fontSize:14, fontWeight:700, cursor:"pointer" }}>
+            📤 {selected.length > 0 ? `선택 ${selected.length}곳` : "전체"} 발행
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PriceInputModal({ reportRecs, customPrices, setCustomPrices, getPrice, onClose, onConfirm }) {
   const locSet = {};
   reportRecs.forEach(r => {
     const k = (r.from||"")+"||"+(r.to||"");
-    if (!locSet[k]) locSet[k] = { from:r.from, to:r.to };
+    if (!locSet[k]) locSet[k] = { from:r.from, to:r.to, material:r.work?.material };
   });
   const locs = Object.entries(locSet).sort(([a],[b])=>a.localeCompare(b));
+
+  // 모달이 열릴 때, 기존 저장된 단가를 미리 채워서 표시 (변경분만 수정하면 됨)
+  useEffect(() => {
+    setCustomPrices(prev => {
+      const next = { ...prev };
+      let changed = false;
+      locs.forEach(([k, loc]) => {
+        if (next[k] === undefined) {
+          const saved = getPrice ? getPrice(loc.from, loc.to, loc.material) : 0;
+          if (saved) { next[k] = saved; changed = true; }
+        }
+      });
+      return changed ? next : prev;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
     <div style={{ position:"fixed", top:0, left:0, right:0, bottom:0, zIndex:9999, background:"rgba(0,0,0,0.85)", display:"flex", flexDirection:"column", justifyContent:"center", padding:16 }}>
       <div style={{ background:C.card, borderRadius:16, overflow:"hidden", maxHeight:"85vh", display:"flex", flexDirection:"column" }}>
         <div style={{ padding:"16px 16px 8px", borderBottom:`1px solid ${C.border}` }}>
-          <div style={{ fontSize:16, fontWeight:700, color:C.accent, marginBottom:4 }}>🚛 기사별 정산 — 현장별 단가 입력</div>
-          <div style={{ fontSize:12, color:C.muted }}>운반단가 입력 후 출력 (빈칸은 기존 단가 사용)</div>
+          <div style={{ fontSize:16, fontWeight:700, color:C.accent, marginBottom:4 }}>🚛 기사마감 — 현장별 단가 입력</div>
+          <div style={{ fontSize:12, color:C.muted }}>기존 단가가 자동으로 채워져요. 변동된 곳만 수정하고, 새 현장은 직접 입력하세요.</div>
         </div>
         <div style={{ overflowY:"auto", flex:1, padding:12 }}>
           {locs.length === 0 && <div style={{ padding:20, color:C.muted, textAlign:"center" }}>이 기간 일보가 없어요</div>}
-          {locs.map(([k, loc]) => (
-            <div key={k} style={{ display:"flex", alignItems:"center", gap:8, marginBottom:8, background:C.card2, borderRadius:10, padding:"10px 12px" }}>
-              <div style={{ flex:1, fontSize:13 }}>
-                <span style={{ color:C.blue, fontWeight:700 }}>{loc.from}</span>
-                <span style={{ color:C.muted, margin:"0 6px" }}>→</span>
-                <span style={{ color:C.green, fontWeight:700 }}>{loc.to}</span>
+          {locs.map(([k, loc]) => {
+            const savedPrice = getPrice ? getPrice(loc.from, loc.to, loc.material) : 0;
+            const isNew = !savedPrice;
+            return (
+              <div key={k} style={{ display:"flex", alignItems:"center", gap:8, marginBottom:8, background:C.card2, borderRadius:10, padding:"10px 12px", border: isNew ? `1px solid ${C.accent}` : "1px solid transparent" }}>
+                <div style={{ flex:1, fontSize:13 }}>
+                  <span style={{ color:C.blue, fontWeight:700 }}>{loc.from}</span>
+                  <span style={{ color:C.muted, margin:"0 6px" }}>→</span>
+                  <span style={{ color:C.green, fontWeight:700 }}>{loc.to}</span>
+                  {isNew && <span style={{ marginLeft:6, fontSize:10, color:C.accent }}>NEW</span>}
+                </div>
+                <input type="number" value={customPrices[k]??""} onChange={e=>setCustomPrices(prev=>({...prev,[k]:e.target.value===""?"":Number(e.target.value)}))} placeholder={isNew ? "새 단가 입력" : "단가"}
+                  style={{ width:100, background:C.card, border:`1.5px solid ${isNew?C.accent:C.border}`, borderRadius:8, padding:"7px 10px", color:C.text, fontSize:13, outline:"none", textAlign:"right" }} />
+                <span style={{ fontSize:11, color:C.muted }}>원</span>
               </div>
-              <input type="number" value={customPrices[k]||""} onChange={e=>setCustomPrices(prev=>({...prev,[k]:Number(e.target.value)}))} placeholder="단가"
-                style={{ width:90, background:C.card, border:`1.5px solid ${C.border}`, borderRadius:8, padding:"7px 10px", color:C.text, fontSize:13, outline:"none", textAlign:"right" }} />
-              <span style={{ fontSize:11, color:C.muted }}>원</span>
-            </div>
-          ))}
+            );
+          })}
         </div>
         <div style={{ display:"flex", gap:8, padding:12, borderTop:`1px solid ${C.border}` }}>
           <button onClick={onClose} style={{ flex:1, padding:12, borderRadius:10, background:"transparent", border:`1px solid ${C.border}`, color:C.muted, fontSize:14, cursor:"pointer" }}>취소</button>
@@ -1756,6 +1827,7 @@ function AdminAddModal({ vehicles, locations, materials, onClose, onAdd }) {
 function AdminDash({ records, vehicles, setVehicles, mappings, setMappings, onSaveMappings, prices, setPrices, locations, setLocations, materials, setMaterials, driverSettings, setDriverSettings, adminPw, setAdminPw, onLock, onSaveExpense, onRefresh }) {
   const _today = new Date(); const _ty = _today.getFullYear(), _tm = String(_today.getMonth()+1).padStart(2,"0"), _td = String(_today.getDate()).padStart(2,"0"); const _todayStr = `${_ty}-${_tm}-${_td}`;
   const [showAddModal, setShowAddModal] = useState(false);
+  const [showClientSelectModal, setShowClientSelectModal] = useState(false);
   const [period, setPeriod]         = useState("custom");
   const [filterVehicle, setFilterVehicle] = useState("");
   const [showPriceModal, setShowPriceModal] = useState(false);
@@ -1872,19 +1944,9 @@ function AdminDash({ records, vehicles, setVehicles, mappings, setMappings, onSa
   };
 
   // ── 업체별 청구서 xlsx — 템플릿 복사 방식 ──────────────────
-  const downloadByClient = async (closingType) => {
-    let sD, eD;
-    if (period === "custom") {
-      [sD, eD] = getPeriodRange();
-    } else {
-      const now = new Date();
-      const y = now.getFullYear(), m = now.getMonth();
-      if (closingType === "mid") {
-        sD = localDate(y, m - 1, 26); eD = localDate(y, m, 25);
-      } else {
-        sD = localDate(y, m, 1); eD = localDate(y, m + 1, 0);
-      }
-    }
+  const downloadByClient = async (selectedClients = null) => {
+    // 관리자 화면에서 직접 조회한 날짜 범위를 항상 사용
+    const [sD, eD] = getPeriodRange();
 
     const inR = r => r.date && r.date.match(/^\d{4}-\d{2}-\d{2}$/) && r.date >= sD && r.date <= eD;
     const recs = records.filter(r => r.type === "report" && inR(r) && r.status !== "pending");
@@ -1896,7 +1958,11 @@ function AdminDash({ records, vehicles, setVehicles, mappings, setMappings, onSa
       targets.forEach(c => { if (!byCl[c]) byCl[c] = []; byCl[c].push(r); });
     });
 
-    const clientList = Object.entries(byCl).filter(([c]) => c !== "(미매핑)");
+    let clientList = Object.entries(byCl).filter(([c]) => c !== "(미매핑)");
+    // 특정 업체만 선택했다면 그 업체만 필터링
+    if (selectedClients && selectedClients.length > 0) {
+      clientList = clientList.filter(([c]) => selectedClients.includes(c));
+    }
     if (clientList.length === 0) { alert("청구할 업체가 없습니다."); return; }
 
     try {
@@ -2127,13 +2193,9 @@ function AdminDash({ records, vehicles, setVehicles, mappings, setMappings, onSa
           ri++;
         });
 
-        // 모든 mergeCells/데이터 작성이 끝난 뒤, 마지막에 행 높이/폰트를 다시 확정 적용
-        // (ExcelJS는 mergeCells 호출 시 해당 행의 height를 리셋하는 이슈가 있음)
-        // 1행: 30, 2~9행: 21(단 4,6행은 5), 10행부터: 16(단 11행은 2.5)
-        ws.getRow(1).height = 30;
-        for (let r=2; r<=9; r++) { ws.getRow(r).height = (r===4||r===6) ? 5 : 21; }
-        for (let r=10; r<=200; r++) { ws.getRow(r).height = (r===11) ? 2.5 : 16; }
-        // 폰트: 1행은 돋움 20, 나머지는 돋움 10
+        // 모든 mergeCells/데이터 작성이 끝난 뒤, 마지막에 폰트 → 행 높이 순서로 확정 적용
+        // (ExcelJS는 row.height 지정 후 eachCell 등으로 그 행에 다시 접근하면 height가 리셋되는 이슈가 있음
+        //  → 반드시 폰트를 먼저 다 적용한 뒤, 맨 마지막에 height만 지정)
         ws.getRow(1).eachCell({ includeEmpty: true }, cell => {
           cell.font = { ...(cell.font||{}), name: "돋움", size: 20 };
         });
@@ -2142,14 +2204,17 @@ function AdminDash({ records, vehicles, setVehicles, mappings, setMappings, onSa
             cell.font = { ...(cell.font||{}), name: "돋움", size: 10 };
           });
         }
+        // 1행: 30, 2~9행: 21(단 4,6행은 5), 10행부터: 16(단 11행은 2.5)
+        ws.getRow(1).height = 30;
+        for (let r=2; r<=9; r++) { ws.getRow(r).height = (r===4||r===6) ? 5 : 21; }
+        for (let r=10; r<=200; r++) { ws.getRow(r).height = (r===11) ? 2.5 : 16; }
 
         ws.pageSetup = { paperSize: 9, orientation: "portrait", fitToPage: true, fitToWidth: 1, fitToHeight: 0 };
       });
 
       const buf = await wb.xlsx.writeBuffer();
       const blob = new Blob([buf], { type: "application/octet-stream" });
-      const suffix = closingType==="mid"?"25일마감":"말일마감";
-      saveAs(blob, `청구서_${suffix}_${sD}_${eD}.xlsx`);
+      saveAs(blob, `청구서_${sD}_${eD}.xlsx`);
     } catch(err) {
       alert("엑셀 생성 오류: " + err.message);
       console.error(err);
@@ -2500,10 +2565,8 @@ function AdminDash({ records, vehicles, setVehicles, mappings, setMappings, onSa
 
           <div style={{ display: "flex", gap: 8, marginBottom: 14, flexWrap: "wrap" }}>
             <Btn onClick={() => setShowAddModal(true)} color={C.green} style={{ flex: 1 }}>➕ 일보추가</Btn>
-            <Btn onClick={downloadAll} style={{ flex: 1 }} disabled={reportRecs.length === 0}>📥 전체CSV</Btn>
-            <Btn onClick={() => downloadByClient("mid")} color={C.blue} style={{ flex: 1 }} disabled={reportRecs.length === 0}>📤 25일마감</Btn>
-            <Btn onClick={() => downloadByClient("end")} color={C.blue} style={{ flex: 1 }} disabled={reportRecs.length === 0}>📤 말일마감</Btn>
-            <Btn onClick={() => setShowPriceModal(true)} color={C.purple} style={{ flex: 1 }} disabled={reportRecs.length === 0}>🚛 기사별 정산</Btn>
+            <Btn onClick={() => setShowClientSelectModal(true)} color={C.blue} style={{ flex: 1 }} disabled={reportRecs.length === 0}>📤 일보마감</Btn>
+            <Btn onClick={() => setShowPriceModal(true)} color={C.purple} style={{ flex: 1 }} disabled={reportRecs.length === 0}>🚛 기사마감</Btn>
           </div>
 
           {Object.entries(byClient).length === 0 ? (
@@ -2663,12 +2726,33 @@ function AdminDash({ records, vehicles, setVehicles, mappings, setMappings, onSa
         }
       }}
     />}
+    {/* 일보마감 - 업체 선택 모달 */}
+    {showClientSelectModal && <ClientSelectModal
+      reportRecs={reportRecs}
+      getClients={getClients}
+      onClose={() => setShowClientSelectModal(false)}
+      onConfirm={(selected) => {
+        setShowClientSelectModal(false);
+        downloadByClient(selected.length > 0 ? selected : null);
+      }}
+    />}
     {showPriceModal && <PriceInputModal
       reportRecs={reportRecs}
       customPrices={customPrices}
       setCustomPrices={setCustomPrices}
+      getPrice={getPrice}
       onClose={()=>setShowPriceModal(false)}
-      onConfirm={()=>{ const p = {...customPrices}; setShowPriceModal(false); setTimeout(()=>downloadByVehicle(p), 100); }}
+      onConfirm={()=>{
+        const p = {...customPrices};
+        // 변경/신규 입력한 단가를 저장해서 다음 마감때도 자동으로 채워지게 함
+        const toSave = {};
+        Object.entries(p).forEach(([k, v]) => { if (v !== "" && v != null) toSave[k] = v; });
+        if (Object.keys(toSave).length > 0) {
+          setPrices(prev => ({ ...prev, ...toSave }));
+        }
+        setShowPriceModal(false);
+        setTimeout(()=>downloadByVehicle(p), 100);
+      }}
     />}
     </>
   );
