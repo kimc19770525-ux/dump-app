@@ -2203,11 +2203,12 @@ function AdminDash({ records, vehicles, setVehicles, mappings, setMappings, onSa
             cell.font = { ...(cell.font||{}), name: "돋움", size: 10 };
           });
         }
-        // 1행: 30, 2~9행: 21(단 4,6행은 5), 10행부터: 16(단 11행은 2.5)
+        // 실제 표시 목표값의 2배를 지정 (환경상 저장값이 절반으로 렌더링되는 것을 보정)
+        // 목표: 1행15, 2/3/5/7/8/9/10/11행10.50, 4/6행2.30, 12행부터7.90
         const safeCommit = (row) => { try { row.commit(); } catch(e) {} };
         const row1 = ws.getRow(1); row1.height = 30; safeCommit(row1);
-        for (let r=2; r<=9; r++) { const rr = ws.getRow(r); rr.height = (r===4||r===6) ? 5 : 21; safeCommit(rr); }
-        for (let r=10; r<=200; r++) { const rr = ws.getRow(r); rr.height = (r===11) ? 2.5 : 16; safeCommit(rr); }
+        for (let r=2; r<=11; r++) { const rr = ws.getRow(r); rr.height = (r===4||r===6) ? 4.6 : 21; safeCommit(rr); }
+        for (let r=12; r<=200; r++) { const rr = ws.getRow(r); rr.height = 15.8; safeCommit(rr); }
 
         ws.pageSetup = { paperSize: 9, orientation: "portrait", fitToPage: true, fitToWidth: 1, fitToHeight: 0 };
       });
