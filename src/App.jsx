@@ -2247,7 +2247,7 @@ function AdminDash({ records, vehicles, setVehicles, mappings, setMappings, onSa
           {width:13},{width:16.75},{width:6.875},{width:6.5},
           {width:6.5},{width:7.5},{width:8.375},{width:9}
         ];
-        for (let r=1; r<=200; r++) { ws.getRow(r).height = 24; }
+        // 행 높이는 모든 셀 작성이 끝난 뒤 이 함수 맨 끝에서 한 번만 최종 확정한다
 
         // 헤더행
         const headers = ["매입처","","날자","","상차지","하차지","품명","수량","m3","시간/㎥","운반단가","지급운반비"];
@@ -2310,7 +2310,9 @@ function AdminDash({ records, vehicles, setVehicles, mappings, setMappings, onSa
         totalCell.alignment = rightV;
         totalCell.border = thinBorder;
 
-        for (let r=1; r<=200; r++) { ws.getRow(r).height = 24; }
+        // 청구서와 동일한 보정 원리 적용 (실제 표시 10.5pt 상당 = 코드값 21)
+        const safeCommitV = (row) => { try { row.commit(); } catch(e) {} };
+        for (let r=1; r<=200; r++) { const rr = ws.getRow(r); rr.height = 21; safeCommitV(rr); }
       });
 
       const buf = await wb.xlsx.writeBuffer();
