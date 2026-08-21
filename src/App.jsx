@@ -1927,7 +1927,7 @@ function AdminDash({ records, vehicles, setVehicles, mappings, setMappings, onSa
         ws.getRow(1).height = 36;
         const titleCell = ws.getCell("C1");
         titleCell.value = "거 래 명 세 서";
-        titleCell.font = { name:"돋움", size:18, bold:true };
+        titleCell.font = { name:"돋움", size:20, bold:true };
         titleCell.alignment = centerV;
 
         // ── 상단 정보 ──
@@ -2127,6 +2127,22 @@ function AdminDash({ records, vehicles, setVehicles, mappings, setMappings, onSa
           ri++;
         });
 
+        // 모든 mergeCells/데이터 작성이 끝난 뒤, 마지막에 행 높이/폰트를 다시 확정 적용
+        // (ExcelJS는 mergeCells 호출 시 해당 행의 height를 리셋하는 이슈가 있음)
+        // 1행: 30, 2~9행: 21(단 4,6행은 5), 10행부터: 16(단 11행은 2.5)
+        ws.getRow(1).height = 30;
+        for (let r=2; r<=9; r++) { ws.getRow(r).height = (r===4||r===6) ? 5 : 21; }
+        for (let r=10; r<=200; r++) { ws.getRow(r).height = (r===11) ? 2.5 : 16; }
+        // 폰트: 1행은 돋움 20, 나머지는 돋움 10
+        ws.getRow(1).eachCell({ includeEmpty: true }, cell => {
+          cell.font = { ...(cell.font||{}), name: "돋움", size: 20 };
+        });
+        for (let r=2; r<=200; r++) {
+          ws.getRow(r).eachCell({ includeEmpty: true }, cell => {
+            cell.font = { ...(cell.font||{}), name: "돋움", size: 10 };
+          });
+        }
+
         ws.pageSetup = { paperSize: 9, orientation: "portrait", fitToPage: true, fitToWidth: 1, fitToHeight: 0 };
       });
 
@@ -2227,6 +2243,8 @@ function AdminDash({ records, vehicles, setVehicles, mappings, setMappings, onSa
         totalCell.font = { name:"돋움", size:10, bold:true };
         totalCell.alignment = rightV;
         totalCell.border = thinBorder;
+
+        for (let r=1; r<=200; r++) { ws.getRow(r).height = 24; }
       });
 
       const buf = await wb.xlsx.writeBuffer();
