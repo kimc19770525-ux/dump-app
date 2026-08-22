@@ -2785,21 +2785,7 @@ export default function App() {
 
   const isAdminMode = window.location.search.includes("admin");
 
-  // 2달 지난 일보 자동 삭제
-  const autoCleanup = async (recs) => {
-    const twoMonthsAgo = new Date();
-    twoMonthsAgo.setMonth(twoMonthsAgo.getMonth() - 2);
-    const cutoff = twoMonthsAgo.toISOString().slice(0, 10);
-    const old = recs.filter(r => r.type === "report" && r.date && r.date < cutoff);
-    for (const r of old) {
-      try {
-        await fetch(`${window.sbRecords.url}/rest/v1/records?id=eq.${r.id}`, {
-          method: "DELETE",
-          headers: { apikey: window.sbRecords.key, Authorization: `Bearer ${window.sbRecords.key}` }
-        });
-      } catch {}
-    }
-  };
+  // 자동삭제 기능 제거됨 (2026-08: 세무/소송 증빙용으로 전체 데이터 영구 보관 필요)
 
   useEffect(() => {
     (async () => {
@@ -2852,7 +2838,6 @@ export default function App() {
           const recs = await window.sbRecords.getAll();
           const filtered = recs.filter(r => r.type !== 'settings');
           setRecords(filtered);
-          await autoCleanup(filtered);
         } catch {}
         try { const m = await window.storage.get("dump_mappings"); if (m?.value) setMappings(JSON.parse(m.value)); } catch {}
         try { const p = await window.storage.get("dump_prices");   if (p?.value) setPricesState(JSON.parse(p.value)); } catch {}
