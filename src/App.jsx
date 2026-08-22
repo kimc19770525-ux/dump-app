@@ -2206,9 +2206,15 @@ function AdminDash({ records, vehicles, setVehicles, mappings, setMappings, onSa
         // 실제 표시 목표값의 2배를 지정 (환경상 저장값이 절반으로 렌더링되는 것을 보정)
         // 목표: 1행15, 2/3/5/7/8/9/10/11행10.50, 4/6행2.30, 12행부터7.90
         const safeCommit = (row) => { try { row.commit(); } catch(e) {} };
-        const row1 = ws.getRow(1); row1.height = 30; safeCommit(row1);
-        for (let r=2; r<=11; r++) { const rr = ws.getRow(r); rr.height = (r===4||r===6) ? 4.6 : 21; safeCommit(rr); }
-        for (let r=12; r<=200; r++) { const rr = ws.getRow(r); rr.height = 21; safeCommit(rr); }
+        // 1행/2~10행/35~39행/45행은 2배로 확대 (사용자 요청)
+        const row1 = ws.getRow(1); row1.height = 60; safeCommit(row1);
+        for (let r=2; r<=10; r++) { const rr = ws.getRow(r); rr.height = (r===4||r===6) ? 9.2 : 42; safeCommit(rr); }
+        { const rr = ws.getRow(11); rr.height = 21; safeCommit(rr); }
+        for (let r=12; r<=200; r++) {
+          const rr = ws.getRow(r);
+          rr.height = (r>=35 && r<=39) || r===45 ? 42 : 21;
+          safeCommit(rr);
+        }
 
         ws.pageSetup = { paperSize: 9, orientation: "portrait", fitToPage: true, fitToWidth: 1, fitToHeight: 0 };
       });
