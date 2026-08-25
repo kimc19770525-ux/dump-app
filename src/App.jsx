@@ -1824,7 +1824,7 @@ function AdminAddModal({ vehicles, locations, materials, onClose, onAdd }) {
   );
 }
 
-function AdminDash({ records, vehicles, setVehicles, mappings, setMappings, onSaveMappings, prices, setPrices, locations, setLocations, materials, setMaterials, driverSettings, setDriverSettings, adminPw, setAdminPw, onLock, onSaveExpense, onRefresh }) {
+function AdminDash({ records, vehicles, setVehicles, mappings, setMappings, onSaveMappings, prices, setPrices, locations, setLocations, materials, setMaterials, driverSettings, setDriverSettings, clientEmails, setClientEmails, adminPw, setAdminPw, onLock, onSaveExpense, onRefresh }) {
   const _today = new Date(); const _ty = _today.getFullYear(), _tm = String(_today.getMonth()+1).padStart(2,"0"), _td = String(_today.getDate()).padStart(2,"0"); const _todayStr = `${_ty}-${_tm}-${_td}`;
   const [showAddModal, setShowAddModal] = useState(false);
   const [showClientSelectModal, setShowClientSelectModal] = useState(false);
@@ -1982,8 +1982,8 @@ function AdminDash({ records, vehicles, setVehicles, mappings, setMappings, onSa
         const ws = wb.addWorksheet(client.slice(0,31));
         ws.properties.defaultRowHeight = 21;
         ws.columns = [
-          {width:3},{width:3},{width:10},{width:12},{width:14},{width:14},
-          {width:10},{width:8},{width:8},{width:10},{width:12},{width:10}
+          {width:4.875},{width:5.125},{width:6.0},{width:6.0},{width:12.125},{width:13.0},
+          {width:6.0},{width:7.375},{width:6.0},{width:9.875},{width:13.0},{width:12.25}
         ];
         // 행 높이는 모든 셀 작성이 끝난 뒤 이 함수 맨 끝에서 한 번만 최종 확정한다
         // (여기서 미리 지정하지 않음 — mergeCells/셀접근이 반복되며 리셋되는 것을 방지)
@@ -1992,29 +1992,51 @@ function AdminDash({ records, vehicles, setVehicles, mappings, setMappings, onSa
         ws.mergeCells("C1:L1");
         const titleCell = ws.getCell("C1");
         titleCell.value = "거 래 명 세 서";
-        titleCell.font = { name:"돋움", size:20, bold:true };
+        titleCell.font = { name:"돋움", size:18, bold:true };
         titleCell.alignment = centerV;
 
         // ── 상단 정보 ──
         ws.getCell("C3").value = "일        자:";
+        ws.getCell("C3").font = { name:"돋움", size:11, bold:true };
         ws.getCell("E3").value = new Date(eD + "T00:00:00");
         ws.getCell("E3").numFmt = "yyyy-mm-dd";
+        ws.getCell("E3").font = { name:"굴림", size:11, bold:true };
         ws.getCell("I3").value = "공 급 자:";
-        ws.getCell("I3").font = { name:"맑은 고딕", bold:true };
+        ws.getCell("I3").font = { name:"돋움", size:11, bold:true };
         ws.getCell("K3").value = "㈜ 다 솔 중 기  ";
         ws.getCell("K3").font = { name:"맑은 고딕", bold:true, size:14 };
 
         ws.getCell("C5").value = "공급받는자:";
-        ws.getCell("E5").value = client;
-        ws.getCell("E5").font = { name:"맑은 고딕", bold:true, size:12 };
+        ws.getCell("C5").font = { name:"돋움", size:11, bold:true };
+        ws.getCell("E5").value = "㈜ " + client;
+        ws.getCell("E5").font = { name:"굴림", size:11, bold:true };
         ws.getCell("I5").value = "759-88-00944";
+        ws.getCell("I5").font = { name:"돋움", size:11, bold:true };
         ws.getCell("L5").value = "최 기 희";
+        ws.getCell("L5").font = { name:"돋움", size:11, bold:true };
 
         ws.getCell("C7").value = "금        액:";
+        ws.getCell("C7").font = { name:"돋움", size:11, bold:true };
+        ws.getCell("E7").value = { formula: "K36" };
+        ws.getCell("E7").font = { name:"돋움", size:11, bold:true };
+        ws.getCell("E7").numFmt = "#,##0";
         ws.getCell("I7").value = "인천시 서구 청라에메랄드로 112 웰카운티 226동 1602호";
+        ws.getCell("I7").font = { name:"돋움", size:9, bold:true };
         ws.getCell("I8").value = "T:032-564-2306  F:032-566-2306";
+        ws.getCell("I8").font = { name:"돋움", size:9, bold:true };
 
         ws.getCell("C9").value = "청구내역:";
+        ws.getCell("C9").font = { name:"돋움", size:11, bold:false };
+
+        // ── 공급자 정보 박스(I3:L8) 이중선 테두리 ──
+        for (const col of ["I","J","K","L"]) {
+          ws.getCell(col+"3").border = { ...(ws.getCell(col+"3").border||{}), top:{style:"double"} };
+          ws.getCell(col+"8").border = { ...(ws.getCell(col+"8").border||{}), bottom:{style:"double"} };
+        }
+        for (let r=3; r<=8; r++) {
+          ws.getCell("I"+r).border = { ...(ws.getCell("I"+r).border||{}), left:{style:"double"} };
+          ws.getCell("L"+r).border = { ...(ws.getCell("L"+r).border||{}), right:{style:"double"} };
+        }
 
         // ── 헤더행(11) ──
         const headers = ["월/일","no.","상차지","하차지","품명","수량","㎥","단가","금액","비고"];
@@ -2022,7 +2044,7 @@ function AdminDash({ records, vehicles, setVehicles, mappings, setMappings, onSa
           const col = String.fromCharCode(67 + i); // C부터
           const cell = ws.getCell(col + "11");
           cell.value = h;
-          cell.font = { name:"돋움", size:10, bold:true };
+          cell.font = { name:"돋움", size:9, bold:false };
           cell.alignment = centerV;
           cell.border = thinBorder;
         });
@@ -2065,7 +2087,7 @@ function AdminDash({ records, vehicles, setVehicles, mappings, setMappings, onSa
           const setC = (col, val, numFmt) => {
             const cell = ws.getCell(col+ri);
             cell.value = val;
-            cell.font = { name:"돋움", size:10 };
+            cell.font = { name:"맑은 고딕", size:11 };
             cell.alignment = leftV;
             cell.border = thinBorder;
             if (numFmt) cell.numFmt = numFmt;
@@ -2078,7 +2100,7 @@ function AdminDash({ records, vehicles, setVehicles, mappings, setMappings, onSa
           else setC("I", g.qty);
           const kCell = ws.getCell("K"+ri);
           kCell.value = { formula: (g.isM3?"I":"H")+ri+"*J"+ri };
-          kCell.font = { name:"돋움", size:10 };
+          kCell.font = { name:"맑은 고딕", size:11 };
           kCell.border = thinBorder;
           kCell.alignment = rightV;
           // 나머지 빈 셀도 테두리
@@ -2196,10 +2218,14 @@ function AdminDash({ records, vehicles, setVehicles, mappings, setMappings, onSa
         // (ExcelJS는 row.height 지정 후 eachCell 등으로 그 행에 다시 접근하면 height가 리셋되는 이슈가 있음
         //  → 반드시 폰트를 먼저 다 적용한 뒤, 맨 마지막에 height만 지정)
         ws.getRow(1).eachCell({ includeEmpty: true }, cell => {
-          cell.font = { ...(cell.font||{}), name: "돋움", size: 20 };
+          cell.font = { ...(cell.font||{}), name: "돋움", size: 18 };
         });
+        const preservedFontCells = new Set(["C3","E3","I3","K3","C5","E5","I5","L5","C7","E7","I7","I8","C9"]);
         for (let r=2; r<=200; r++) {
           ws.getRow(r).eachCell({ includeEmpty: true }, cell => {
+            if (preservedFontCells.has(cell.address)) return; // 상단 라벨 영역: 이미 지정한 폰트 유지
+            if (r === 11) { cell.font = { ...(cell.font||{}), name:"돋움", size:9 }; return; } // 표 헤더
+            if (r >= 12 && r <= 33) { cell.font = { ...(cell.font||{}), name:"맑은 고딕", size:11 }; return; } // 갑지 데이터행
             cell.font = { ...(cell.font||{}), name: "돋움", size: 10 };
           });
         }
@@ -2245,6 +2271,7 @@ function AdminDash({ records, vehicles, setVehicles, mappings, setMappings, onSa
       const leftV = { vertical:"middle" };
 
       const wb = new ExcelJS.Workbook();
+      let grandPayoutTotal = 0; // 경영현황 시트용 — 전 차량 지급운반비 합계(숫자)
 
       Object.entries(byVehicle).forEach(([vehicle, rows]) => {
         const ws = wb.addWorksheet(vehicle.slice(0,31));
@@ -2268,6 +2295,7 @@ function AdminDash({ records, vehicles, setVehicles, mappings, setMappings, onSa
 
         // 데이터 행
         const sortedV = rows.slice().sort((a, b) => a.date.localeCompare(b.date));
+        let vehiclePayoutTotal = 0; // 이 차량의 지급운반비 합계(숫자) — 경영현황 합산용
         sortedV.forEach((row, i) => {
           const r = i + 2;
           const day = row.date ? Number(row.date.slice(8)) : "";
@@ -2275,6 +2303,7 @@ function AdminDash({ records, vehicles, setVehicles, mappings, setMappings, onSa
           const isM3 = row.work?.unit === "㎥" || row.work?.unit === "m³";
           const locKey = (row.from||"") + "||" + (row.to||"");
           const price = customPrices[locKey] || getPrice(row.from, row.to, row.work?.material) || 0;
+          vehiclePayoutTotal += price * qty;
 
           const setC = (col, val, align) => {
             const cell = ws.getCell(col+r);
@@ -2300,6 +2329,7 @@ function AdminDash({ records, vehicles, setVehicles, mappings, setMappings, onSa
           lCell.alignment = rightV;
           lCell.border = thinBorder;
         });
+        grandPayoutTotal += vehiclePayoutTotal;
 
         // 합계행
         const totalRow = sortedV.length + 2;
@@ -2316,10 +2346,120 @@ function AdminDash({ records, vehicles, setVehicles, mappings, setMappings, onSa
         totalCell.alignment = rightV;
         totalCell.border = thinBorder;
 
+        // 기타비용(차감) — 엑셀에서 직접 입력하는 칸
+        const etcRow = totalRow + 1;
+        ws.mergeCells(`A${etcRow}:K${etcRow}`);
+        const etcLabelCell = ws.getCell(`A${etcRow}`);
+        etcLabelCell.value = "기타비용(차감)";
+        etcLabelCell.font = { name:"돋움", size:10, bold:true };
+        etcLabelCell.alignment = rightV;
+        const etcValCell = ws.getCell(`L${etcRow}`);
+        etcValCell.value = 0;
+        etcValCell.font = { name:"돋움", size:10, color: { argb: "FFCC0000" } };
+        etcValCell.alignment = rightV;
+        etcValCell.border = thinBorder;
+        etcValCell.numFmt = "#,##0";
+        etcValCell.note = "수리비/주유비/가불 외 추가로 차감할 금액을 여기 직접 입력하세요.";
+
+        // 최종지급액 = 지급운반비합계 - 기타비용
+        const finalRow = etcRow + 1;
+        ws.mergeCells(`A${finalRow}:K${finalRow}`);
+        const finalLabelCell = ws.getCell(`A${finalRow}`);
+        finalLabelCell.value = "최종지급액";
+        finalLabelCell.font = { name:"돋움", size:11, bold:true };
+        finalLabelCell.alignment = rightV;
+        const finalValCell = ws.getCell(`L${finalRow}`);
+        finalValCell.value = { formula: `L${totalRow}-L${etcRow}` };
+        finalValCell.font = { name:"돋움", size:11, bold:true };
+        finalValCell.alignment = rightV;
+        finalValCell.border = thinBorder;
+        finalValCell.numFmt = "#,##0";
+
         // 청구서와 동일한 보정 원리 적용 (실제 표시 10.5pt 상당 = 코드값 21)
         const safeCommitV = (row) => { try { row.commit(); } catch(e) {} };
         for (let r=1; r<=200; r++) { const rr = ws.getRow(r); rr.height = 21; safeCommitV(rr); }
       });
+
+      // ── 경영현황 시트 — 매출/비용/법인수익 요약 ──────────────────
+      {
+        const ws = wb.addWorksheet("경영현황");
+        ws.columns = [{width:22},{width:16},{width:30}];
+
+        const titleCell = ws.getCell("A1");
+        titleCell.value = `경영현황 요약 (${vStartD} ~ ${vEndD})`;
+        titleCell.font = { name:"맑은 고딕", size:14, bold:true };
+        ws.mergeCells("A1:C1");
+
+        // 매출(업체청구금액) 합계 — 청구서와 동일 단가 기준, 미매핑 포함 전체
+        const revenueTotal = vReportRecs.reduce((s, r) => {
+          const qty = Number(r.work?.qty) || 0;
+          const price = getPrice(r.from, r.to, r.work?.material) || 0;
+          return s + price * qty;
+        }, 0);
+
+        const repairTotal    = repairRecs.reduce((s, r) => s + (r.items||[]).reduce((s2, it) => s2 + (Number(it.amount)||0), 0), 0);
+        const fuelTotal       = fuelRecs.reduce((s, r) => s + (Number(r.amount)||0), 0);
+        const insuranceTotal  = insuranceRecs.reduce((s, r) => s + (Number(r.amount)||0), 0);
+        const taxTotal        = taxRecs.reduce((s, r) => s + (Number(r.amount)||0), 0);
+        const fineTotal       = fineRecs.reduce((s, r) => s + (Number(r.amount)||0), 0);
+
+        let row = 3;
+        const sectionHeader = (label) => {
+          const c = ws.getCell(`A${row}`);
+          c.value = label;
+          c.font = { name:"맑은 고딕", size:12, bold:true, color: { argb: "FF2E86DE" } };
+          row += 1;
+        };
+        const dataRow = (label, value, opts = {}) => {
+          const labelCell = ws.getCell(`A${row}`);
+          labelCell.value = label;
+          labelCell.font = { name:"돋움", size:11, bold: !!opts.bold };
+          const valCell = ws.getCell(`B${row}`);
+          valCell.value = opts.formula ? { formula: opts.formula } : value;
+          valCell.font = { name:"돋움", size:11, bold: !!opts.bold, color: opts.editable ? { argb: "FFCC0000" } : undefined };
+          valCell.numFmt = "#,##0";
+          valCell.alignment = { horizontal: "right" };
+          valCell.border = { top:{style:"thin"}, bottom:{style:"thin"}, left:{style:"thin"}, right:{style:"thin"} };
+          if (opts.note) valCell.note = opts.note;
+          const thisRow = row;
+          row += 1;
+          return thisRow;
+        };
+
+        sectionHeader("📈 매출");
+        const revenueRow = dataRow("업체청구금액 합계", revenueTotal);
+
+        row += 1;
+        sectionHeader("📉 비용");
+        const payoutRow    = dataRow("기사 지급운반비 합계", grandPayoutTotal);
+        const repairRow    = dataRow("수리비", repairTotal);
+        const fuelRow      = dataRow("주유비", fuelTotal);
+        const insuranceRow = dataRow("보험료", insuranceTotal);
+        const taxRow       = dataRow("세금", taxTotal);
+        const fineRow      = dataRow("과태료", fineTotal);
+
+        row += 1;
+        sectionHeader("💳 법인카드 사용내역 (직접 입력)");
+        const cardRows = [];
+        ["카드1", "카드2", "카드3"].forEach(label => {
+          cardRows.push(dataRow(label, 0, { editable: true, note: "카드사에서 받은 이번 마감기간 총 사용금액을 입력하세요." }));
+        });
+        const cardSumRow = dataRow("법인카드 합계", null, { bold: true, formula: `SUM(B${cardRows[0]}:B${cardRows[cardRows.length-1]})` });
+
+        row += 1;
+        sectionHeader("🧾 기타비용 (직접 입력)");
+        const etcSummaryRow = dataRow("기타비용", 0, { editable: true, note: "위 항목에 없는 추가 비용을 직접 입력하세요." });
+
+        row += 1;
+        sectionHeader("💰 법인수익");
+        dataRow(
+          "법인수익 (매출 - 비용 합계)", null,
+          { bold: true, formula: `B${revenueRow}-B${payoutRow}-B${repairRow}-B${fuelRow}-B${insuranceRow}-B${taxRow}-B${fineRow}-B${cardSumRow}-B${etcSummaryRow}` }
+        );
+
+        ws.getColumn("A").width = 26;
+        ws.getColumn("B").width = 16;
+      }
 
       const buf = await wb.xlsx.writeBuffer();
       const blob = new Blob([buf], { type: "application/octet-stream" });
@@ -2654,6 +2794,50 @@ function AdminDash({ records, vehicles, setVehicles, mappings, setMappings, onSa
       {/* ── 설정 탭 ── */}
       {adminTab === "settings" && (
         <>
+          {/* 이메일 설정 — 업체별/기사별 발송 주소 */}
+          <Card style={{ marginBottom: 14 }}>
+            <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 6 }}>📧 이메일 설정</div>
+            <div style={{ fontSize: 12, color: C.muted, marginBottom: 12 }}>
+              업체청구서·기성내역서를 보낼 이메일 주소를 등록해두면 자동발송 시 사용됩니다.
+            </div>
+
+            <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8, color: C.blue }}>업체 이메일 (청구서용)</div>
+            {Array.from(new Set((mappings||[]).map(m => m.client).filter(Boolean))).length === 0 ? (
+              <div style={{ fontSize: 12, color: C.muted, marginBottom: 16 }}>매핑 탭에서 청구업체를 먼저 등록하세요.</div>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 16 }}>
+                {Array.from(new Set((mappings||[]).map(m => m.client).filter(Boolean))).map(client => (
+                  <div key={client} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <span style={{ fontSize: 13, width: 90, flexShrink: 0, color: C.text }}>{client}</span>
+                    <input
+                      type="email"
+                      defaultValue={clientEmails?.[client] || ""}
+                      placeholder="example@naver.com"
+                      onBlur={e => setClientEmails(prev => ({ ...prev, [client]: e.target.value.trim() }))}
+                      style={{ flex: 1, background: C.card2, border: `1.5px solid ${C.border}`, borderRadius: 8, padding: "8px 12px", color: C.text, fontSize: 13, outline: "none" }}
+                    />
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8, color: C.green }}>기사(차량) 이메일 (기성내역서용)</div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {(vehicles||[]).map(v => (
+                <div key={v} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <span style={{ fontSize: 13, width: 90, flexShrink: 0, color: C.text }}>{v}</span>
+                  <input
+                    type="email"
+                    defaultValue={driverSettings?.[v]?.email || ""}
+                    placeholder="example@naver.com"
+                    onBlur={e => setDriverSettings(prev => ({ ...prev, [v]: { ...(prev?.[v]||{}), email: e.target.value.trim() } }))}
+                    style={{ flex: 1, background: C.card2, border: `1.5px solid ${C.border}`, borderRadius: 8, padding: "8px 12px", color: C.text, fontSize: 13, outline: "none" }}
+                  />
+                </div>
+              ))}
+            </div>
+          </Card>
+
           {/* 상·하차지 목록 관리 */}
           <LocManagePanel locations={locations} setLocations={setLocations} records={records} onBulkRename={bulkRename} />
 
@@ -2778,6 +2962,7 @@ export default function App() {
   const [mappings, setMappings]         = useState([]);
   const [prices, setPricesState]        = useState({});
   const [driverSettings, setDSState]    = useState({});
+  const [clientEmails, setCEState]      = useState({});
   const [materials, setMaterialsState] = useState(DEFAULT_MATERIALS);
   const [locations, setLocationsState] = useState({ from: [], to: [] });
   const [adminPw, setAdminPwState]      = useState(ADMIN_PW);
@@ -2842,6 +3027,7 @@ export default function App() {
         try { const m = await window.storage.get("dump_mappings"); if (m?.value) setMappings(JSON.parse(m.value)); } catch {}
         try { const p = await window.storage.get("dump_prices");   if (p?.value) setPricesState(JSON.parse(p.value)); } catch {}
         try { const d = await window.storage.get("dump_driver_settings"); if (d?.value) setDSState(JSON.parse(d.value)); } catch {}
+        try { const ce = await window.storage.get("dump_client_emails"); if (ce?.value) setCEState(JSON.parse(ce.value)); } catch {}
         try { const pw = await window.storage.get("dump_adminpw"); if (pw?.value) setAdminPwState(pw.value); } catch {}
       }
       setLoading(false);
@@ -2938,6 +3124,10 @@ export default function App() {
     setDSState(prev => { const next = typeof fn === "function" ? fn(prev) : fn; window.storage.set("dump_driver_settings", JSON.stringify(next)).catch(() => {}); return next; });
   };
 
+  const updateClientEmails = fn => {
+    setCEState(prev => { const next = typeof fn === "function" ? fn(prev) : fn; window.storage.set("dump_client_emails", JSON.stringify(next)).catch(() => {}); return next; });
+  };
+
   const setAdminPw = (pw) => {
     setAdminPwState(pw);
     window.storage.set("dump_adminpw", pw).catch(() => {});
@@ -2986,6 +3176,7 @@ export default function App() {
                 locations={locations} setLocations={updateLocations}
                 materials={materials} setMaterials={updateMaterials}
                 driverSettings={driverSettings} setDriverSettings={updateDriverSettings}
+                clientEmails={clientEmails} setClientEmails={updateClientEmails}
                 adminPw={adminPw} setAdminPw={setAdminPw}
                 onLock={() => setAdminUnlocked(false)}
                 onSaveExpense={saveRecord}
