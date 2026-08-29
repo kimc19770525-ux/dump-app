@@ -1084,7 +1084,7 @@ function MappingRow({ m, color, onDelete, onEdit }) {
 // ════════════════════════════════════════════════════════════
 // 마감 탭 컴포넌트
 // ════════════════════════════════════════════════════════════
-function ClosingTab({ records, closings, onClose, onRefresh, getClients, getPrice, startD, endD }) {
+function ClosingTab({ records, closings, onClose, onRefresh, getClients, getPrice, clientPrices, setClientPrices, startD, endD }) {
 
   const [selMonth, setSelMonth] = useState("");
   const [viewMonth, setViewMonth] = useState("");
@@ -1824,7 +1824,7 @@ function AdminAddModal({ vehicles, locations, materials, onClose, onAdd }) {
   );
 }
 
-function AdminDash({ records, vehicles, setVehicles, mappings, setMappings, onSaveMappings, prices, setPrices, locations, setLocations, materials, setMaterials, driverSettings, setDriverSettings, clientEmails, setClientEmails, adminPw, setAdminPw, onLock, onSaveExpense, onRefresh }) {
+function AdminDash({ records, vehicles, setVehicles, mappings, setMappings, onSaveMappings, prices, setPrices, locations, setLocations, materials, setMaterials, driverSettings, setDriverSettings, clientEmails, setClientEmails, clientPrices, setClientPrices, adminPw, setAdminPw, onLock, onSaveExpense, onRefresh }) {
   const _today = new Date(); const _ty = _today.getFullYear(), _tm = String(_today.getMonth()+1).padStart(2,"0"), _td = String(_today.getDate()).padStart(2,"0"); const _todayStr = `${_ty}-${_tm}-${_td}`;
   const [showAddModal, setShowAddModal] = useState(false);
   const [showClientSelectModal, setShowClientSelectModal] = useState(false);
@@ -1944,6 +1944,15 @@ function AdminDash({ records, vehicles, setVehicles, mappings, setMappings, onSa
   };
 
   // ── 업체별 청구서 xlsx — 템플릿 복사 방식 ──────────────────
+  // 업체청구단가: 별도로 지정된 값이 있으면 그 값, 없으면 기사정산단가(getPrice)와 동일
+  const getClientPrice = (from, to) => {
+    const key = `${from}||${to}`;
+    const key2 = `${from}||`;
+    if (clientPrices[key] !== undefined && clientPrices[key] !== "") return Number(clientPrices[key]);
+    if (clientPrices[key2] !== undefined && clientPrices[key2] !== "") return Number(clientPrices[key2]);
+    return getPrice(from, to);
+  };
+
   const downloadByClient = async (selectedClients = null) => {
     // 관리자 화면에서 직접 조회한 날짜 범위를 항상 사용
     const [sD, eD] = getPeriodRange();
@@ -2098,13 +2107,14 @@ function AdminDash({ records, vehicles, setVehicles, mappings, setMappings, onSa
           setC("G", g.mat||"");
           if (!g.isM3) setC("H", g.qty);
           else setC("I", g.qty);
+          setC("J", getClientPrice(g.from, g.to) || "", "#,##0");
           const kCell = ws.getCell("K"+ri);
           kCell.value = { formula: (g.isM3?"I":"H")+ri+"*J"+ri };
           kCell.font = { name:"맑은 고딕", size:11 };
           kCell.border = thinBorder;
           kCell.alignment = rightV;
           // 나머지 빈 셀도 테두리
-          "CJL".split("").forEach(c => { ws.getCell(c+ri).border = thinBorder; });
+          "CL".split("").forEach(c => { ws.getCell(c+ri).border = thinBorder; });
         });
         // 빈 데이터행도 테두리(사용 안한 행 포함)
         for (let ri=DS; ri<=DE; ri++) {
@@ -2777,6 +2787,8 @@ function AdminDash({ records, vehicles, setVehicles, mappings, setMappings, onSa
           onRefresh={onRefresh}
           getClients={getClients}
           getPrice={getPrice}
+          clientPrices={clientPrices}
+          setClientPrices={setClientPrices}
           startD={startD}
           endD={endD}
         />
@@ -2794,6 +2806,83 @@ function AdminDash({ records, vehicles, setVehicles, mappings, setMappings, onSa
       {/* ── 설정 탭 ── */}
       {adminTab === "settings" && (
         <>
+          {/* 단가표 — 기사정산단가와 업체청구단가를 구분 관리 */}
+          <Card style={{ marginBottom: 14 }}>
+            <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 6 }}>💰 단가표 (업체청구단가)</div>
+            <div style={{ fontSize: 12, color: C.muted, marginBottom: 12 }}>
+              왼쪽은 기사정산에 쓰이는 단가(참고용, 수정 불가), 오른쪽은 업체청구서에 쓸 단가입니다.
+              비워두면 기사정산단가와 동일하게 청구되고, 다르게 청구할 노선만 오른쪽 칸에 입력하면 됩니다.
+            </div>
+            {(() => {
+              const routeMap = {};
+              records.filter(r => r.type === "report").forEach(r => {
+                const clients = getClients(r);
+                const targets = clients.length > 0 ? clients : ["(미매핑)"];
+                targets.forEach(client => {
+                  const key = `${r.from||""}||${r.to||""}||${r.work?.material||""}||${client}`;
+                  if (!routeMap[key]) {
+                    routeMap[key] = { from: r.from||"", to: r.to||"", mat: r.work?.material||"", client };
+                  }
+                });
+              });
+              const routes = Object.values(routeMap).sort((a,b) =>
+                a.client.localeCompare(b.client) || a.from.localeCompare(b.from) || a.to.localeCompare(b.to)
+              );
+              if (routes.length === 0) {
+                return <div style={{ fontSize: 12, color: C.muted }}>운반내역이 아직 없습니다.</div>;
+              }
+              return (
+                <div style={{ maxHeight: 420, overflowY: "auto" }}>
+                  <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+                    <thead>
+                      <tr style={{ background: C.card2, position: "sticky", top: 0 }}>
+                        <th style={{ padding: "6px 8px", textAlign: "left" }}>업체</th>
+                        <th style={{ padding: "6px 8px", textAlign: "left" }}>상차지</th>
+                        <th style={{ padding: "6px 8px", textAlign: "left" }}>하차지</th>
+                        <th style={{ padding: "6px 8px", textAlign: "left" }}>품명</th>
+                        <th style={{ padding: "6px 8px", textAlign: "right" }}>기사정산단가</th>
+                        <th style={{ padding: "6px 8px", textAlign: "right" }}>업체청구단가</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {routes.map((rt, i) => {
+                        const priceKey = `${rt.from}||${rt.to}`;
+                        const driverPrice = getPrice(rt.from, rt.to, rt.mat) || 0;
+                        return (
+                          <tr key={i} style={{ borderBottom: `1px solid ${C.border}` }}>
+                            <td style={{ padding: "6px 8px" }}>{rt.client}</td>
+                            <td style={{ padding: "6px 8px" }}>{rt.from}</td>
+                            <td style={{ padding: "6px 8px" }}>{rt.to}</td>
+                            <td style={{ padding: "6px 8px" }}>{rt.mat}</td>
+                            <td style={{ padding: "6px 8px", textAlign: "right", color: C.muted }}>
+                              {driverPrice ? driverPrice.toLocaleString() : "-"}
+                            </td>
+                            <td style={{ padding: "6px 8px", textAlign: "right" }}>
+                              <input
+                                type="number"
+                                defaultValue={clientPrices?.[priceKey] ?? ""}
+                                placeholder={driverPrice ? String(driverPrice) : "0"}
+                                onBlur={e => {
+                                  const v = e.target.value.trim();
+                                  setClientPrices(prev => {
+                                    const next = { ...prev };
+                                    if (v === "") delete next[priceKey]; else next[priceKey] = Number(v);
+                                    return next;
+                                  });
+                                }}
+                                style={{ width: 100, textAlign: "right", background: C.card2, border: `1.5px solid ${C.border}`, borderRadius: 6, padding: "4px 8px", color: C.text, fontSize: 12, outline: "none" }}
+                              />
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              );
+            })()}
+          </Card>
+
           {/* 이메일 설정 — 업체별/기사별 발송 주소 */}
           <Card style={{ marginBottom: 14 }}>
             <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 6 }}>📧 이메일 설정</div>
@@ -2963,6 +3052,7 @@ export default function App() {
   const [prices, setPricesState]        = useState({});
   const [driverSettings, setDSState]    = useState({});
   const [clientEmails, setCEState]      = useState({});
+  const [clientPrices, setCPState]      = useState({});
   const [materials, setMaterialsState] = useState(DEFAULT_MATERIALS);
   const [locations, setLocationsState] = useState({ from: [], to: [] });
   const [adminPw, setAdminPwState]      = useState(ADMIN_PW);
@@ -3028,6 +3118,7 @@ export default function App() {
         try { const p = await window.storage.get("dump_prices");   if (p?.value) setPricesState(JSON.parse(p.value)); } catch {}
         try { const d = await window.storage.get("dump_driver_settings"); if (d?.value) setDSState(JSON.parse(d.value)); } catch {}
         try { const ce = await window.storage.get("dump_client_emails"); if (ce?.value) setCEState(JSON.parse(ce.value)); } catch {}
+        try { const cp = await window.storage.get("dump_client_prices"); if (cp?.value) setCPState(JSON.parse(cp.value)); } catch {}
         try { const pw = await window.storage.get("dump_adminpw"); if (pw?.value) setAdminPwState(pw.value); } catch {}
       }
       setLoading(false);
@@ -3128,6 +3219,10 @@ export default function App() {
     setCEState(prev => { const next = typeof fn === "function" ? fn(prev) : fn; window.storage.set("dump_client_emails", JSON.stringify(next)).catch(() => {}); return next; });
   };
 
+  const updateClientPrices = fn => {
+    setCPState(prev => { const next = typeof fn === "function" ? fn(prev) : fn; window.storage.set("dump_client_prices", JSON.stringify(next)).catch(() => {}); return next; });
+  };
+
   const setAdminPw = (pw) => {
     setAdminPwState(pw);
     window.storage.set("dump_adminpw", pw).catch(() => {});
@@ -3177,6 +3272,7 @@ export default function App() {
                 materials={materials} setMaterials={updateMaterials}
                 driverSettings={driverSettings} setDriverSettings={updateDriverSettings}
                 clientEmails={clientEmails} setClientEmails={updateClientEmails}
+                clientPrices={clientPrices} setClientPrices={updateClientPrices}
                 adminPw={adminPw} setAdminPw={setAdminPw}
                 onLock={() => setAdminUnlocked(false)}
                 onSaveExpense={saveRecord}
