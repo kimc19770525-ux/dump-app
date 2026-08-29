@@ -415,8 +415,9 @@ function ReportForm({ vehicles, locationHints, locations, records, onSave, mater
       for (let i = 0; i < trips.length; i++) {
         const t = trips[i];
         // 상하차지 공백 정규화 (앞뒤/중간 공백 제거해서 같은 현장으로 통일)
-        const normFrom = (t.from || "").replace(/\s+/g, "");
-        const normTo   = (t.to   || "").replace(/\s+/g, "");
+        // 상하차지 정규화: 공백 제거 + 영문은 대문자로 통일 (노량진SK / 노량진sk / 노량진 SK → 전부 동일 취급)
+        const normFrom = (t.from || "").replace(/\s+/g, "").toUpperCase();
+        const normTo   = (t.to   || "").replace(/\s+/g, "").toUpperCase();
         await onSave({
           type: "report", date, vehicle,
           from: normFrom, to: normTo, work: t.work,
@@ -1263,6 +1264,45 @@ function LocManagePanel({ locations, setLocations, records, onBulkRename }) {
     }));
   };
 
+  // ── 유사 지명 감지 (오타/철자 차이로 갈라진 것 찾기) ──
+  const levenshtein = (a, b) => {
+    const dp = Array.from({ length: a.length + 1 }, (_, i) => [i, ...Array(b.length).fill(0)]);
+    for (let j = 0; j <= b.length; j++) dp[0][j] = j;
+    for (let i = 1; i <= a.length; i++) {
+      for (let j = 1; j <= b.length; j++) {
+        dp[i][j] = a[i-1] === b[j-1]
+          ? dp[i-1][j-1]
+          : 1 + Math.min(dp[i-1][j-1], dp[i-1][j], dp[i][j-1]);
+      }
+    }
+    return dp[a.length][b.length];
+  };
+
+  const findSimilarPairs = (list) => {
+    const pairs = [];
+    for (let i = 0; i < list.length; i++) {
+      for (let j = i+1; j < list.length; j++) {
+        const a = list[i], b = list[j];
+        if (a === b || a.length < 3 || b.length < 3) continue;
+        const dist = levenshtein(a, b);
+        if (dist >= 1 && dist <= 2) pairs.push([a, b, dist]);
+      }
+    }
+    return pairs.sort((x,y) => x[2]-y[2]);
+  };
+
+  const mergeInto = (type, keep, drop) => {
+    setLocations(prev => ({
+      ...prev,
+      [type]: [...new Set((prev[type]||[]).filter(x => x !== drop).concat(keep))]
+    }));
+    onBulkRename(type, drop, keep);
+  };
+
+  const similarFrom = findSimilarPairs(allFrom).map(p => [...p, "from"]);
+  const similarTo   = findSimilarPairs(allTo).map(p => [...p, "to"]);
+  const similarAll  = [...similarFrom, ...similarTo];
+
   return (
     <Card style={{ marginBottom: 14 }}>
       <div style={{ fontWeight: 700, marginBottom: 6, fontSize: 14 }}>📍 상·하차지 목록 관리</div>
@@ -1270,6 +1310,32 @@ function LocManagePanel({ locations, setLocations, records, onBulkRename }) {
         기사가 입력하면 자동으로 목록에 쌓여요.<br/>
         ✏️ 눌러서 이름 수정하면 기존 일보도 자동으로 바뀌어요.
       </div>
+
+      {similarAll.length > 0 && (
+        <div style={{ background: C.card2, border: `1px solid ${C.accent}60`, borderRadius: 10, padding: 12, marginBottom: 16 }}>
+          <div style={{ fontSize: 13, fontWeight: 700, color: C.accent, marginBottom: 8 }}>
+            ⚠️ 비슷한 이름 후보 ({similarAll.length}건) — 같은 곳인데 다르게 입력된 건 아닌지 확인하세요
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {similarAll.map(([a, b, dist, type], i) => (
+              <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", fontSize: 12 }}>
+                <span style={{ color: C.muted }}>{type === "from" ? "상차지" : "하차지"}:</span>
+                <span style={{ color: C.text, fontWeight: 600 }}>{a}</span>
+                <span style={{ color: C.muted }}>↔</span>
+                <span style={{ color: C.text, fontWeight: 600 }}>{b}</span>
+                <button onClick={() => mergeInto(type, a, b)}
+                  style={{ background: C.blue+"20", border: `1px solid ${C.blue}40`, borderRadius: 6, padding: "3px 8px", color: C.blue, fontSize: 11, cursor: "pointer" }}>
+                  "{b}"→"{a}"로 합치기
+                </button>
+                <button onClick={() => mergeInto(type, b, a)}
+                  style={{ background: C.green+"20", border: `1px solid ${C.green}40`, borderRadius: 6, padding: "3px 8px", color: C.green, fontSize: 11, cursor: "pointer" }}>
+                  "{a}"→"{b}"로 합치기
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {[["from","↑ 상차지",allFrom,C.blue],["to","↓ 하차지",allTo,C.green]].map(([type,label,list,col])=>(
         <div key={type} style={{ marginBottom: 16 }}>
@@ -1608,14 +1674,124 @@ function TodayReports({ todayRecs, todayStr }) {
 // ════════════════════════════════════════════════════════════
 // 기사 화면 — 일보입력 + 오늘 제출내역
 // ════════════════════════════════════════════════════════════
-function DriverScreen({ vehicles, locationHints, locations, records, onSave, onRefresh, materials }) {
+function DriverScreen({ vehicles, locationHints, locations, records, onSave, onRefresh, materials, driverSettings }) {
+  const [mode, setMode] = useState("input"); // "input" | "myrecords"
   return (
     <>
       <Nav />
       <div style={{ background:C.card, borderLeft:`1px solid ${C.border}`, borderRight:`1px solid ${C.border}`, minHeight:"calc(100vh - 110px)" }}>
-        <ReportForm vehicles={vehicles} locationHints={locationHints} locations={locations} records={records} onSave={onSave} materials={materials} />
+        <div style={{ display:"flex", borderBottom:`1px solid ${C.border}` }}>
+          {[["input","📝 일보 입력"],["myrecords","📊 내 실적 보기"]].map(([id,label]) => (
+            <button key={id} onClick={()=>setMode(id)}
+              style={{ flex:1, padding:"14px 0", background:"transparent", border:"none", borderBottom: mode===id ? `2px solid ${C.blue}` : "2px solid transparent",
+                       color: mode===id ? C.text : C.muted, fontSize:14, fontWeight: mode===id?700:500, cursor:"pointer" }}>
+              {label}
+            </button>
+          ))}
+        </div>
+        {mode === "input" && (
+          <ReportForm vehicles={vehicles} locationHints={locationHints} locations={locations} records={records} onSave={onSave} materials={materials} />
+        )}
+        {mode === "myrecords" && (
+          <MyRecordsView vehicles={vehicles} records={records} driverSettings={driverSettings} />
+        )}
       </div>
     </>
+  );
+}
+
+// ════════════════════════════════════════════════════════════
+// 기사 본인 실적 조회 — 차량번호 + PIN 확인 후 본인 차량 기록만 표시
+// ════════════════════════════════════════════════════════════
+function MyRecordsView({ vehicles, records, driverSettings }) {
+  const [vehicle, setVehicle] = useState("");
+  const [pin, setPin] = useState("");
+  const [unlocked, setUnlocked] = useState(false);
+  const [err, setErr] = useState("");
+
+  const monthStart = today().slice(0,7) + "-01";
+  const monthEnd = today();
+
+  const tryUnlock = () => {
+    if (!vehicle) { setErr("차량번호를 선택해주세요."); return; }
+    const savedPin = driverSettings?.[vehicle]?.pin || "";
+    if (!savedPin) { setErr("이 차량은 PIN이 아직 등록되지 않았습니다. 관리자에게 문의하세요."); return; }
+    if (pin.trim() !== savedPin) { setErr("PIN번호가 일치하지 않습니다."); return; }
+    setErr("");
+    setUnlocked(true);
+  };
+
+  if (!unlocked) {
+    return (
+      <div style={{ padding: "40px 20px", maxWidth: 360, margin: "0 auto" }}>
+        <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 6, textAlign:"center" }}>내 실적 보기</div>
+        <div style={{ fontSize: 12, color: C.muted, marginBottom: 20, textAlign:"center" }}>
+          본인 차량번호와 PIN을 입력하면 이번 달 본인 실적만 볼 수 있습니다.
+        </div>
+        <div style={{ marginBottom: 12 }}>
+          <div style={{ fontSize: 12, color: C.muted, marginBottom: 6 }}>차량번호</div>
+          <select value={vehicle} onChange={e=>setVehicle(e.target.value)}
+            style={{ width:"100%", padding:12, borderRadius:10, background:C.card2, border:`1px solid ${C.border}`, color:C.text, fontSize:14 }}>
+            <option value="">선택하세요</option>
+            {(vehicles||[]).map(v => <option key={v} value={v}>{v}</option>)}
+          </select>
+        </div>
+        <div style={{ marginBottom: 16 }}>
+          <div style={{ fontSize: 12, color: C.muted, marginBottom: 6 }}>PIN번호</div>
+          <input type="password" inputMode="numeric" value={pin} onChange={e=>setPin(e.target.value)}
+            placeholder="4자리 숫자"
+            style={{ width:"100%", padding:12, borderRadius:10, background:C.card2, border:`1px solid ${C.border}`, color:C.text, fontSize:14 }} />
+        </div>
+        {err && <div style={{ color:C.danger, fontSize:12, marginBottom:12, textAlign:"center" }}>{err}</div>}
+        <button onClick={tryUnlock}
+          style={{ width:"100%", padding:14, borderRadius:10, background:C.blue, border:"none", color:"#fff", fontSize:15, fontWeight:700, cursor:"pointer" }}>
+          확인
+        </button>
+      </div>
+    );
+  }
+
+  const myRecs = (records||[])
+    .filter(r => r.type === "report" && r.vehicle === vehicle && r.date >= monthStart && r.date <= monthEnd)
+    .sort((a,b) => (b.date||"").localeCompare(a.date||""));
+
+  const totalQty = myRecs.reduce((s,r) => s + (Number(r.work?.qty)||0), 0);
+
+  return (
+    <div style={{ padding: "16px" }}>
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom: 14 }}>
+        <div style={{ fontSize: 15, fontWeight: 700 }}>차량 {vehicle} — {monthStart.slice(0,7)}월 실적</div>
+        <button onClick={()=>{ setUnlocked(false); setPin(""); }}
+          style={{ background:"transparent", border:`1px solid ${C.border}`, color:C.muted, borderRadius:8, padding:"6px 12px", fontSize:12, cursor:"pointer" }}>
+          🔒 나가기
+        </button>
+      </div>
+      <div style={{ background:C.card2, borderRadius:12, padding:14, marginBottom:14, display:"flex", justifyContent:"space-around", textAlign:"center" }}>
+        <div>
+          <div style={{ fontSize:20, fontWeight:900 }}>{myRecs.length}</div>
+          <div style={{ fontSize:11, color:C.muted }}>운행건수</div>
+        </div>
+        <div>
+          <div style={{ fontSize:20, fontWeight:900 }}>{totalQty.toLocaleString()}</div>
+          <div style={{ fontSize:11, color:C.muted }}>총 수량</div>
+        </div>
+      </div>
+      {myRecs.length === 0 ? (
+        <div style={{ textAlign:"center", color:C.muted, padding:"40px 0", fontSize:13 }}>이번 달 기록이 없습니다.</div>
+      ) : (
+        <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+          {myRecs.map(r => (
+            <div key={r.id} style={{ background:C.card2, borderRadius:10, padding:12, border:`1px solid ${C.border}` }}>
+              <div style={{ display:"flex", justifyContent:"space-between", marginBottom:4 }}>
+                <span style={{ fontSize:13, fontWeight:700 }}>{r.date}</span>
+                <span style={{ fontSize:12, color:C.muted }}>{r.work?.material} {r.work?.qty}{r.work?.unit}</span>
+              </div>
+              <div style={{ fontSize:12, color:C.muted }}>{r.from} → {r.to}</div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -2911,7 +3087,7 @@ function AdminDash({ records, vehicles, setVehicles, mappings, setMappings, onSa
             )}
 
             <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8, color: C.green }}>기사(차량) 이메일 (기성내역서용)</div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 16 }}>
               {(vehicles||[]).map(v => (
                 <div key={v} style={{ display: "flex", alignItems: "center", gap: 8 }}>
                   <span style={{ fontSize: 13, width: 90, flexShrink: 0, color: C.text }}>{v}</span>
@@ -2920,6 +3096,26 @@ function AdminDash({ records, vehicles, setVehicles, mappings, setMappings, onSa
                     defaultValue={driverSettings?.[v]?.email || ""}
                     placeholder="example@naver.com"
                     onBlur={e => setDriverSettings(prev => ({ ...prev, [v]: { ...(prev?.[v]||{}), email: e.target.value.trim() } }))}
+                    style={{ flex: 1, background: C.card2, border: `1.5px solid ${C.border}`, borderRadius: 8, padding: "8px 12px", color: C.text, fontSize: 13, outline: "none" }}
+                  />
+                </div>
+              ))}
+            </div>
+
+            <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8, color: C.accent }}>기사 PIN번호 (내 실적 보기용, 4자리 숫자 추천)</div>
+            <div style={{ fontSize: 11, color: C.muted, marginBottom: 8 }}>
+              기사가 앱에서 "내 실적 보기" 누를 때 본인 차량번호와 함께 입력하는 번호입니다. 다른 기사 실적을 못 보게 막는 최소한의 장치입니다.
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {(vehicles||[]).map(v => (
+                <div key={v} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <span style={{ fontSize: 13, width: 90, flexShrink: 0, color: C.text }}>{v}</span>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    defaultValue={driverSettings?.[v]?.pin || ""}
+                    placeholder="예: 1234"
+                    onBlur={e => setDriverSettings(prev => ({ ...prev, [v]: { ...(prev?.[v]||{}), pin: e.target.value.trim() } }))}
                     style={{ flex: 1, background: C.card2, border: `1.5px solid ${C.border}`, borderRadius: 8, padding: "8px 12px", color: C.text, fontSize: 13, outline: "none" }}
                   />
                 </div>
@@ -3249,7 +3445,7 @@ export default function App() {
           <DriverScreen
             vehicles={vehicles} locationHints={locationHints} locations={locations}
             records={records} onSave={saveRecord} onRefresh={refreshRecords}
-            materials={materials}
+            materials={materials} driverSettings={driverSettings}
           />
         )}
 
