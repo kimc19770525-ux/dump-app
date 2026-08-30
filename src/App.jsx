@@ -3015,10 +3015,10 @@ function AdminDash({ records, vehicles, setVehicles, mappings, setMappings, onSa
         <>
           {/* 단가표 — 기사정산단가와 업체청구단가를 구분 관리 */}
           <Card style={{ marginBottom: 14 }}>
-            <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 6 }}>💰 단가표 (업체청구단가)</div>
+            <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 6 }}>💰 단가표 (기사정산단가 / 업체청구단가)</div>
             <div style={{ fontSize: 12, color: C.muted, marginBottom: 12 }}>
-              왼쪽은 기사정산에 쓰이는 단가(참고용, 수정 불가), 오른쪽은 업체청구서에 쓸 단가입니다.
-              비워두면 기사정산단가와 동일하게 청구되고, 다르게 청구할 노선만 오른쪽 칸에 입력하면 됩니다.
+              왼쪽은 기사정산·기사 실적보기에 쓰이는 단가, 오른쪽은 업체청구서에 쓸 단가입니다. 둘 다 직접 입력·수정할 수 있습니다.
+              업체청구단가를 비워두면 기사정산단가와 동일하게 청구되고, 다르게 청구할 노선만 오른쪽 칸에 입력하면 됩니다.
             </div>
             {(() => {
               const routeMap = {};
@@ -3061,8 +3061,21 @@ function AdminDash({ records, vehicles, setVehicles, mappings, setMappings, onSa
                             <td style={{ padding: "6px 8px" }}>{rt.from}</td>
                             <td style={{ padding: "6px 8px" }}>{rt.to}</td>
                             <td style={{ padding: "6px 8px" }}>{rt.mat}</td>
-                            <td style={{ padding: "6px 8px", textAlign: "right", color: C.muted }}>
-                              {driverPrice ? driverPrice.toLocaleString() : "-"}
+                            <td style={{ padding: "6px 8px", textAlign: "right" }}>
+                              <input
+                                type="number"
+                                defaultValue={driverPrice || ""}
+                                placeholder="0"
+                                onBlur={e => {
+                                  const v = e.target.value.trim();
+                                  setPrices(prev => {
+                                    const next = { ...prev };
+                                    if (v === "" || Number(v) === 0) delete next[priceKey]; else next[priceKey] = Number(v);
+                                    return next;
+                                  });
+                                }}
+                                style={{ width: 100, textAlign: "right", background: C.card2, border: `1.5px solid ${C.border}`, borderRadius: 6, padding: "4px 8px", color: C.text, fontSize: 12, outline: "none" }}
+                              />
                             </td>
                             <td style={{ padding: "6px 8px", textAlign: "right" }}>
                               <input
