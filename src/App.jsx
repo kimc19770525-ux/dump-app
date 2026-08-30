@@ -3303,6 +3303,8 @@ export default function App() {
           const filtered = recs.filter(r => r.type === 'report');
           setRecords(filtered);
         } catch {}
+        // 기사 화면(내 실적 보기)에서 PIN 확인에 필요하므로 여기서도 불러온다
+        try { const d = await window.storage.get("dump_driver_settings"); if (d?.value) setDSState(JSON.parse(d.value)); } catch {}
       }
       if (isAdminMode) {
         try {
