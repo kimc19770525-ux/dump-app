@@ -1674,7 +1674,7 @@ function TodayReports({ todayRecs, todayStr }) {
 // ════════════════════════════════════════════════════════════
 // 기사 화면 — 일보입력 + 오늘 제출내역
 // ════════════════════════════════════════════════════════════
-function DriverScreen({ vehicles, locationHints, locations, records, onSave, onRefresh, materials, driverSettings }) {
+function DriverScreen({ vehicles, locationHints, locations, records, onSave, onRefresh, materials, driverSettings, prices }) {
   const [mode, setMode] = useState("input"); // "input" | "myrecords"
   return (
     <>
@@ -1693,7 +1693,7 @@ function DriverScreen({ vehicles, locationHints, locations, records, onSave, onR
           <ReportForm vehicles={vehicles} locationHints={locationHints} locations={locations} records={records} onSave={onSave} materials={materials} />
         )}
         {mode === "myrecords" && (
-          <MyRecordsView vehicles={vehicles} records={records} driverSettings={driverSettings} />
+          <MyRecordsView vehicles={vehicles} records={records} driverSettings={driverSettings} prices={prices} />
         )}
       </div>
     </>
@@ -1703,7 +1703,7 @@ function DriverScreen({ vehicles, locationHints, locations, records, onSave, onR
 // ════════════════════════════════════════════════════════════
 // 기사 본인 실적 조회 — 차량번호 + PIN 확인 후 본인 차량 기록만 표시
 // ════════════════════════════════════════════════════════════
-function MyRecordsView({ vehicles, records, driverSettings }) {
+function MyRecordsView({ vehicles, records, driverSettings, prices }) {
   const [vehicle, setVehicle] = useState("");
   const [pin, setPin] = useState("");
   const [unlocked, setUnlocked] = useState(false);
@@ -1711,6 +1711,12 @@ function MyRecordsView({ vehicles, records, driverSettings }) {
 
   const monthStart = today().slice(0,7) + "-01";
   const monthEnd = today();
+
+  const getPrice = (from, to) => {
+    const key = `${from||""}||${to||""}`;
+    const key2 = `${from||""}||`;
+    return (prices||{})[key] || (prices||{})[key2] || 0;
+  };
 
   const tryUnlock = () => {
     if (!vehicle) { setErr("차량번호를 선택해주세요."); return; }
@@ -1751,11 +1757,20 @@ function MyRecordsView({ vehicles, records, driverSettings }) {
     );
   }
 
+  // 1일부터 최근순(오름차순) 정렬
   const myRecs = (records||[])
     .filter(r => r.type === "report" && r.vehicle === vehicle && r.date >= monthStart && r.date <= monthEnd)
-    .sort((a,b) => (b.date||"").localeCompare(a.date||""));
+    .sort((a,b) => (a.date||"").localeCompare(b.date||""));
 
-  const totalQty = myRecs.reduce((s,r) => s + (Number(r.work?.qty)||0), 0);
+  const rows = myRecs.map(r => {
+    const qty = Number(r.work?.qty) || 0;
+    const price = getPrice(r.from, r.to) || 0;
+    const amount = qty * price;
+    return { ...r, qty, price, amount };
+  });
+
+  const totalQty = rows.reduce((s,r) => s + r.qty, 0);
+  const totalAmount = rows.reduce((s,r) => s + r.amount, 0);
 
   return (
     <div style={{ padding: "16px" }}>
@@ -1766,31 +1781,47 @@ function MyRecordsView({ vehicles, records, driverSettings }) {
           🔒 나가기
         </button>
       </div>
-      <div style={{ background:C.card2, borderRadius:12, padding:14, marginBottom:14, display:"flex", justifyContent:"space-around", textAlign:"center" }}>
-        <div>
-          <div style={{ fontSize:20, fontWeight:900 }}>{myRecs.length}</div>
-          <div style={{ fontSize:11, color:C.muted }}>운행건수</div>
-        </div>
-        <div>
-          <div style={{ fontSize:20, fontWeight:900 }}>{totalQty.toLocaleString()}</div>
-          <div style={{ fontSize:11, color:C.muted }}>총 수량</div>
-        </div>
+
+      <div style={{ overflowX: "auto" }}>
+        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12, minWidth: 480 }}>
+          <thead>
+            <tr style={{ background: C.card2 }}>
+              <th style={{ padding: "8px 6px", textAlign: "left", borderBottom:`1px solid ${C.border}` }}>날짜</th>
+              <th style={{ padding: "8px 6px", textAlign: "left", borderBottom:`1px solid ${C.border}` }}>상차지</th>
+              <th style={{ padding: "8px 6px", textAlign: "left", borderBottom:`1px solid ${C.border}` }}>하차지</th>
+              <th style={{ padding: "8px 6px", textAlign: "left", borderBottom:`1px solid ${C.border}` }}>품목</th>
+              <th style={{ padding: "8px 6px", textAlign: "right", borderBottom:`1px solid ${C.border}` }}>수량</th>
+              <th style={{ padding: "8px 6px", textAlign: "right", borderBottom:`1px solid ${C.border}` }}>단가</th>
+              <th style={{ padding: "8px 6px", textAlign: "right", borderBottom:`1px solid ${C.border}` }}>금액</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.length === 0 ? (
+              <tr><td colSpan={7} style={{ textAlign:"center", color:C.muted, padding:"30px 0" }}>이번 달 기록이 없습니다.</td></tr>
+            ) : rows.map(r => (
+              <tr key={r.id} style={{ borderBottom:`1px solid ${C.border}` }}>
+                <td style={{ padding: "8px 6px" }}>{r.date}</td>
+                <td style={{ padding: "8px 6px" }}>{r.from || "-"}</td>
+                <td style={{ padding: "8px 6px" }}>{r.to || "-"}</td>
+                <td style={{ padding: "8px 6px" }}>{r.work?.material || "-"}</td>
+                <td style={{ padding: "8px 6px", textAlign:"right" }}>{r.qty.toLocaleString()}{r.work?.unit||""}</td>
+                <td style={{ padding: "8px 6px", textAlign:"right" }}>{r.price.toLocaleString()}</td>
+                <td style={{ padding: "8px 6px", textAlign:"right", fontWeight:700 }}>{r.amount.toLocaleString()}</td>
+              </tr>
+            ))}
+          </tbody>
+          {rows.length > 0 && (
+            <tfoot>
+              <tr style={{ background: C.card2 }}>
+                <td colSpan={4} style={{ padding: "10px 6px", fontWeight:700 }}>합계 ({rows.length}건)</td>
+                <td style={{ padding: "10px 6px", textAlign:"right", fontWeight:700 }}>{totalQty.toLocaleString()}</td>
+                <td></td>
+                <td style={{ padding: "10px 6px", textAlign:"right", fontWeight:900, color:C.blue }}>{totalAmount.toLocaleString()}</td>
+              </tr>
+            </tfoot>
+          )}
+        </table>
       </div>
-      {myRecs.length === 0 ? (
-        <div style={{ textAlign:"center", color:C.muted, padding:"40px 0", fontSize:13 }}>이번 달 기록이 없습니다.</div>
-      ) : (
-        <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
-          {myRecs.map(r => (
-            <div key={r.id} style={{ background:C.card2, borderRadius:10, padding:12, border:`1px solid ${C.border}` }}>
-              <div style={{ display:"flex", justifyContent:"space-between", marginBottom:4 }}>
-                <span style={{ fontSize:13, fontWeight:700 }}>{r.date}</span>
-                <span style={{ fontSize:12, color:C.muted }}>{r.work?.material} {r.work?.qty}{r.work?.unit}</span>
-              </div>
-              <div style={{ fontSize:12, color:C.muted }}>{r.from} → {r.to}</div>
-            </div>
-          ))}
-        </div>
-      )}
     </div>
   );
 }
@@ -3303,8 +3334,9 @@ export default function App() {
           const filtered = recs.filter(r => r.type === 'report');
           setRecords(filtered);
         } catch {}
-        // 기사 화면(내 실적 보기)에서 PIN 확인에 필요하므로 여기서도 불러온다
+        // 기사 화면(내 실적 보기)에서 PIN 확인 및 단가 표시에 필요하므로 여기서도 불러온다
         try { const d = await window.storage.get("dump_driver_settings"); if (d?.value) setDSState(JSON.parse(d.value)); } catch {}
+        try { const p = await window.storage.get("dump_prices"); if (p?.value) setPricesState(JSON.parse(p.value)); } catch {}
       }
       if (isAdminMode) {
         try {
@@ -3447,7 +3479,7 @@ export default function App() {
           <DriverScreen
             vehicles={vehicles} locationHints={locationHints} locations={locations}
             records={records} onSave={saveRecord} onRefresh={refreshRecords}
-            materials={materials} driverSettings={driverSettings}
+            materials={materials} driverSettings={driverSettings} prices={prices}
           />
         )}
 
