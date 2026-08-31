@@ -81,6 +81,27 @@ function Card({ children, style }) {
   return <div style={{ background: C.card, borderRadius: 16, padding: "20px 18px", border: `1px solid ${C.border}`, ...style }}>{children}</div>;
 }
 
+// 클릭하면 펼쳐지는 카드 — 설정 화면처럼 항목이 많아 항상 열려있으면 스크롤이 길어지는 곳에 사용
+function CollapsibleCard({ title, subtitle, defaultOpen = false, badge, style, children }) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <div style={{ background: C.card, borderRadius: 16, border: `1px solid ${C.border}`, marginBottom: 14, overflow: "hidden", ...style }}>
+      <button onClick={() => setOpen(o => !o)}
+        style={{ width: "100%", display: "flex", justifyContent: "space-between", alignItems: "center",
+                 background: "transparent", border: "none", padding: "16px 18px", cursor: "pointer", textAlign: "left" }}>
+        <div>
+          <div style={{ fontWeight: 700, fontSize: 14, color: C.text }}>
+            {title}{badge ? <span style={{ marginLeft: 8, fontSize: 11, color: C.muted, fontWeight: 500 }}>{badge}</span> : null}
+          </div>
+          {subtitle && <div style={{ fontSize: 12, color: C.muted, marginTop: 4 }}>{subtitle}</div>}
+        </div>
+        <span style={{ fontSize: 20, color: C.muted, flexShrink: 0, marginLeft: 12 }}>{open ? "−" : "+"}</span>
+      </button>
+      {open && <div style={{ padding: "0 18px 20px" }}>{children}</div>}
+    </div>
+  );
+}
+
 function Btn({ children, onClick, color = C.accent, disabled, small, outline, style }) {
   const textColor = outline ? color : (color === C.accent || color === C.green ? "#000" : "#fff");
   return (
@@ -1264,31 +1285,27 @@ function LocManagePanel({ locations, setLocations, records, onBulkRename }) {
     }));
   };
 
-  // ── 유사 지명 감지 (오타/철자 차이로 갈라진 것 찾기) ──
-  const levenshtein = (a, b) => {
-    const dp = Array.from({ length: a.length + 1 }, (_, i) => [i, ...Array(b.length).fill(0)]);
-    for (let j = 0; j <= b.length; j++) dp[0][j] = j;
-    for (let i = 1; i <= a.length; i++) {
-      for (let j = 1; j <= b.length; j++) {
-        dp[i][j] = a[i-1] === b[j-1]
-          ? dp[i-1][j-1]
-          : 1 + Math.min(dp[i-1][j-1], dp[i-1][j], dp[i][j-1]);
-      }
-    }
-    return dp[a.length][b.length];
-  };
+  // ── 유사 지명 감지 ──
+  // 1) 대소문자·띄어쓰기만 다른 경우 (정규화하면 완전히 같아지는 경우)
+  // 2) 한쪽이 다른 쪽을 포함하는 경우 (예: 객현리 / 파주객현리)
+  // 단, 둘 다 이미 관리자가 등록(승인)한 지명이면 의도적으로 구분해둔 것이므로 후보에서 제외
+  const normalize = (s) => (s||"").replace(/\s+/g, "").toUpperCase();
 
-  const findSimilarPairs = (list) => {
+  const findSimilarPairs = (list, approvedSet) => {
     const pairs = [];
     for (let i = 0; i < list.length; i++) {
       for (let j = i+1; j < list.length; j++) {
         const a = list[i], b = list[j];
-        if (a === b || a.length < 3 || b.length < 3) continue;
-        const dist = levenshtein(a, b);
-        if (dist >= 1 && dist <= 2) pairs.push([a, b, dist]);
+        if (a === b) continue;
+        if (approvedSet.has(a) && approvedSet.has(b)) continue; // 둘 다 이미 승인됨 → 의도된 구분
+        const na = normalize(a), nb = normalize(b);
+        if (na === nb) { pairs.push([a, b, "표기차이"]); continue; }
+        if (na.length >= 2 && nb.length >= 2 && (na.includes(nb) || nb.includes(na))) {
+          pairs.push([a, b, "포함관계"]);
+        }
       }
     }
-    return pairs.sort((x,y) => x[2]-y[2]);
+    return pairs;
   };
 
   const mergeInto = (type, keep, drop) => {
@@ -1299,17 +1316,30 @@ function LocManagePanel({ locations, setLocations, records, onBulkRename }) {
     onBulkRename(type, drop, keep);
   };
 
-  const similarFrom = findSimilarPairs(allFrom).map(p => [...p, "from"]);
-  const similarTo   = findSimilarPairs(allTo).map(p => [...p, "to"]);
+  const similarFrom = findSimilarPairs(allFrom, new Set(locations.from||[])).map(p => [...p, "from"]);
+  const similarTo   = findSimilarPairs(allTo, new Set(locations.to||[])).map(p => [...p, "to"]);
   const similarAll  = [...similarFrom, ...similarTo];
 
+  // ── 같은 노선(상차지→하차지)인데 품목이 여러 개로 갈린 경우 ──
+  const routeMaterialMap = {};
+  records.filter(r => r.type === "report" && r.from && r.to && r.work?.material).forEach(r => {
+    const key = `${r.from}||${r.to}`;
+    if (!routeMaterialMap[key]) routeMaterialMap[key] = new Set();
+    routeMaterialMap[key].add(r.work.material);
+  });
+  const mixedMaterialRoutes = Object.entries(routeMaterialMap)
+    .filter(([, mats]) => mats.size > 1)
+    .map(([key, mats]) => {
+      const [from, to] = key.split("||");
+      return { from, to, materials: [...mats] };
+    });
+
   return (
-    <Card style={{ marginBottom: 14 }}>
-      <div style={{ fontWeight: 700, marginBottom: 6, fontSize: 14 }}>📍 상·하차지 목록 관리</div>
-      <div style={{ fontSize: 12, color: C.muted, marginBottom: 14 }}>
-        기사가 입력하면 자동으로 목록에 쌓여요.<br/>
-        ✏️ 눌러서 이름 수정하면 기존 일보도 자동으로 바뀌어요.
-      </div>
+    <CollapsibleCard
+      title="📍 상·하차지 목록 관리"
+      subtitle="기사가 입력하면 자동으로 목록에 쌓여요. ✏️ 눌러서 이름 수정하면 기존 일보도 자동으로 바뀌어요."
+      badge={similarAll.length + mixedMaterialRoutes.length > 0 ? `⚠️ 확인할 것 ${similarAll.length + mixedMaterialRoutes.length}건` : null}
+    >
 
       {similarAll.length > 0 && (
         <div style={{ background: C.card2, border: `1px solid ${C.accent}60`, borderRadius: 10, padding: 12, marginBottom: 16 }}>
@@ -1317,12 +1347,13 @@ function LocManagePanel({ locations, setLocations, records, onBulkRename }) {
             ⚠️ 비슷한 이름 후보 ({similarAll.length}건) — 같은 곳인데 다르게 입력된 건 아닌지 확인하세요
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {similarAll.map(([a, b, dist, type], i) => (
+            {similarAll.map(([a, b, reason, type], i) => (
               <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", fontSize: 12 }}>
                 <span style={{ color: C.muted }}>{type === "from" ? "상차지" : "하차지"}:</span>
                 <span style={{ color: C.text, fontWeight: 600 }}>{a}</span>
                 <span style={{ color: C.muted }}>↔</span>
                 <span style={{ color: C.text, fontWeight: 600 }}>{b}</span>
+                <span style={{ fontSize: 10, color: C.muted, background: C.border, borderRadius: 4, padding: "1px 6px" }}>{reason}</span>
                 <button onClick={() => mergeInto(type, a, b)}
                   style={{ background: C.blue+"20", border: `1px solid ${C.blue}40`, borderRadius: 6, padding: "3px 8px", color: C.blue, fontSize: 11, cursor: "pointer" }}>
                   "{b}"→"{a}"로 합치기
@@ -1331,6 +1362,35 @@ function LocManagePanel({ locations, setLocations, records, onBulkRename }) {
                   style={{ background: C.green+"20", border: `1px solid ${C.green}40`, borderRadius: 6, padding: "3px 8px", color: C.green, fontSize: 11, cursor: "pointer" }}>
                   "{a}"→"{b}"로 합치기
                 </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {mixedMaterialRoutes.length > 0 && (
+        <div style={{ background: C.card2, border: `1px solid ${C.accent}60`, borderRadius: 10, padding: 12, marginBottom: 16 }}>
+          <div style={{ fontSize: 13, fontWeight: 700, color: C.accent, marginBottom: 8 }}>
+            🧱 같은 노선인데 품목이 다르게 입력된 경우 ({mixedMaterialRoutes.length}건)
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            {mixedMaterialRoutes.map((rt, i) => (
+              <div key={i} style={{ fontSize: 12 }}>
+                <div style={{ color: C.muted, marginBottom: 4 }}>{rt.from} → {rt.to}</div>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                  {rt.materials.map((mat, j) => (
+                    <div key={j} style={{ display: "flex", alignItems: "center", gap: 4, background: C.card, border: `1px solid ${C.border}`, borderRadius: 6, padding: "3px 8px" }}>
+                      <span style={{ fontWeight: 600 }}>{mat}</span>
+                      {rt.materials.filter(m => m !== mat).map((other, k) => (
+                        <button key={k} onClick={() => onBulkRename("material", mat, other)}
+                          title={`"${mat}"를 "${other}"로 합치기`}
+                          style={{ background: C.blue+"20", border: `1px solid ${C.blue}40`, borderRadius: 4, padding: "1px 6px", color: C.blue, fontSize: 10, cursor: "pointer" }}>
+                          →{other}
+                        </button>
+                      ))}
+                    </div>
+                  ))}
+                </div>
               </div>
             ))}
           </div>
@@ -1371,7 +1431,7 @@ function LocManagePanel({ locations, setLocations, records, onBulkRename }) {
           )}
         </div>
       ))}
-    </Card>
+    </CollapsibleCard>
   );
 }
 
@@ -2742,9 +2802,13 @@ function AdminDash({ records, vehicles, setVehicles, mappings, setMappings, onSa
 
   // 상·하차지 이름 일괄 수정 (일보 전체)
   const bulkRename = async (field, oldName, newName) => {
-    const targets = records.filter(r => r.type === "report" && r[field] === oldName);
+    const targets = field === "material"
+      ? records.filter(r => r.type === "report" && r.work?.material === oldName)
+      : records.filter(r => r.type === "report" && r[field] === oldName);
     for (const r of targets) {
-      const updated = { ...r, [field]: newName };
+      const updated = field === "material"
+        ? { ...r, work: { ...r.work, material: newName } }
+        : { ...r, [field]: newName };
       try { await window.sbRecords.upsert(updated); } catch {}
     }
     if (targets.length > 0) onRefresh();
@@ -3014,12 +3078,10 @@ function AdminDash({ records, vehicles, setVehicles, mappings, setMappings, onSa
       {adminTab === "settings" && (
         <>
           {/* 단가표 — 기사정산단가와 업체청구단가를 구분 관리 */}
-          <Card style={{ marginBottom: 14 }}>
-            <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 6 }}>💰 단가표 (기사정산단가 / 업체청구단가)</div>
-            <div style={{ fontSize: 12, color: C.muted, marginBottom: 12 }}>
-              왼쪽은 기사정산·기사 실적보기에 쓰이는 단가, 오른쪽은 업체청구서에 쓸 단가입니다. 둘 다 직접 입력·수정할 수 있습니다.
-              업체청구단가를 비워두면 기사정산단가와 동일하게 청구되고, 다르게 청구할 노선만 오른쪽 칸에 입력하면 됩니다.
-            </div>
+          <CollapsibleCard
+            title="💰 단가표 (기사정산단가 / 업체청구단가)"
+            subtitle="왼쪽은 기사정산·기사 실적보기에 쓰이는 단가, 오른쪽은 업체청구서에 쓸 단가입니다. 둘 다 직접 입력·수정할 수 있습니다. 업체청구단가를 비워두면 기사정산단가와 동일하게 청구됩니다."
+          >
             {(() => {
               const routeMap = {};
               records.filter(r => r.type === "report").forEach(r => {
@@ -3101,14 +3163,13 @@ function AdminDash({ records, vehicles, setVehicles, mappings, setMappings, onSa
                 </div>
               );
             })()}
-          </Card>
+          </CollapsibleCard>
 
           {/* 이메일 설정 — 업체별/기사별 발송 주소 */}
-          <Card style={{ marginBottom: 14 }}>
-            <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 6 }}>📧 이메일 설정</div>
-            <div style={{ fontSize: 12, color: C.muted, marginBottom: 12 }}>
-              업체청구서·기성내역서를 보낼 이메일 주소를 등록해두면 자동발송 시 사용됩니다.
-            </div>
+          <CollapsibleCard
+            title="📧 이메일 설정"
+            subtitle="업체청구서·기성내역서를 보낼 이메일 주소를 등록해두면 자동발송 시 사용됩니다."
+          >
 
             <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8, color: C.blue }}>업체 이메일 (청구서용)</div>
             {Array.from(new Set((mappings||[]).map(m => m.client).filter(Boolean))).length === 0 ? (
@@ -3165,15 +3226,13 @@ function AdminDash({ records, vehicles, setVehicles, mappings, setMappings, onSa
                 </div>
               ))}
             </div>
-          </Card>
+          </CollapsibleCard>
 
           {/* 상·하차지 목록 관리 */}
           <LocManagePanel locations={locations} setLocations={setLocations} records={records} onBulkRename={bulkRename} />
 
           {/* 품목 관리 */}
-          <Card style={{ marginBottom: 14 }}>
-            <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 6 }}>📦 품목 관리</div>
-            <div style={{ fontSize: 12, color: C.muted, marginBottom: 12 }}>품목을 추가하거나 X로 삭제할 수 있어요.</div>
+          <CollapsibleCard title="📦 품목 관리" subtitle="품목을 추가하거나 X로 삭제할 수 있어요.">
             <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
               <input
                 value={newMaterial} onChange={e => setNewMaterial(e.target.value)}
@@ -3192,11 +3251,10 @@ function AdminDash({ records, vehicles, setVehicles, mappings, setMappings, onSa
                 </div>
               ))}
             </div>
-          </Card>
+          </CollapsibleCard>
 
           {/* 비밀번호 변경 */}
-          <Card style={{ marginBottom: 14 }}>
-            <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 12 }}>🔐 관리자 비밀번호 변경</div>
+          <CollapsibleCard title="🔐 관리자 비밀번호 변경">
             <Field label="새 비밀번호">
               <input type="password" value={newPw} onChange={e => setNewPw(e.target.value)} placeholder="새 비밀번호"
                 style={{ width: "100%", background: C.card2, border: `1.5px solid ${C.border}`, borderRadius: 10, padding: "11px 14px", color: C.text, fontSize: 15, outline: "none" }} />
@@ -3207,11 +3265,10 @@ function AdminDash({ records, vehicles, setVehicles, mappings, setMappings, onSa
             </Field>
             {pwMsg && <div style={{ fontSize: 13, color: pwMsg.startsWith("✅") ? C.green : C.danger, marginBottom: 10 }}>{pwMsg}</div>}
             <Btn onClick={changePw} style={{ width: "100%" }}>비밀번호 변경</Btn>
-          </Card>
+          </CollapsibleCard>
 
           {/* 차량 관리 */}
-          <Card>
-            <div style={{ fontWeight: 700, marginBottom: 10, fontSize: 14 }}>🚛 차량번호 관리</div>
+          <CollapsibleCard title="🚛 차량번호 관리">
             <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
               <input value={newVehicle} onChange={e => setNewVehicle(e.target.value)} placeholder="차량번호 추가"
                 onKeyDown={e => { if (e.key === "Enter") { const t = newVehicle.trim(); if (t && !vehicles.includes(t)) { setVehicles(v => [...v, t].sort()); setNewVehicle(""); } } }}
@@ -3226,7 +3283,7 @@ function AdminDash({ records, vehicles, setVehicles, mappings, setMappings, onSa
                 </span>
               ))}
             </div>
-          </Card>
+          </CollapsibleCard>
         </>
       )}
     </div>
