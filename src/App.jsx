@@ -2553,14 +2553,14 @@ function AdminDash({ records, vehicles, setVehicles, mappings, setMappings, onSa
       Object.entries(byVehicle).forEach(([vehicle, rows]) => {
         const ws = wb.addWorksheet(vehicle.slice(0,31));
         ws.columns = [
-          {width:10},{width:3.75},{width:6.5},{width:6.5},
+          {width:3.75},{width:6.5},{width:6.5},
           {width:13},{width:16.75},{width:6.875},{width:6.5},
           {width:6.5},{width:7.5},{width:8.375},{width:9}
         ];
         // 행 높이는 모든 셀 작성이 끝난 뒤 이 함수 맨 끝에서 한 번만 최종 확정한다
 
-        // 헤더행
-        const headers = ["매입처","","날자","","상차지","하차지","품명","수량","m3","시간/㎥","운반단가","지급운반비"];
+        // 헤더행 (매입처 열 삭제 → A열부터 날자로 시작)
+        const headers = ["","날자","","상차지","하차지","품명","수량","m3","시간/㎥","운반단가","지급운반비"];
         headers.forEach((h, i) => {
           const col = String.fromCharCode(65 + i);
           const cell = ws.getCell(col + "1");
@@ -2582,55 +2582,57 @@ function AdminDash({ records, vehicles, setVehicles, mappings, setMappings, onSa
           const price = customPrices[locKey] || getPrice(row.from, row.to, row.work?.material) || 0;
           vehiclePayoutTotal += price * qty;
 
-          const setC = (col, val, align) => {
+          const setC = (col, val, align, numFmt) => {
             const cell = ws.getCell(col+r);
             cell.value = val;
             cell.font = { name:"돋움", size:10 };
             cell.alignment = align || leftV;
             cell.border = thinBorder;
+            if (numFmt) cell.numFmt = numFmt;
           };
           setC("A", "");
-          setC("B", "");
-          setC("C", day, rightV);
-          setC("D", Number(vehicle) || vehicle);
-          setC("E", row.from || "");
-          setC("F", row.to || "");
-          setC("G", row.work?.material || "");
-          setC("H", (!isM3 && qty) ? qty : "", rightV);
-          setC("I", (isM3 && qty) ? qty : "", rightV);
-          setC("J", "", rightV);
-          setC("K", price || "", rightV);
-          const lCell = ws.getCell("L"+r);
-          lCell.value = { formula: `IFERROR(K${r}*H${r},0)+IFERROR(K${r}*I${r},0)` };
-          lCell.font = { name:"돋움", size:10 };
-          lCell.alignment = rightV;
-          lCell.border = thinBorder;
+          setC("B", day, rightV);
+          setC("C", Number(vehicle) || vehicle);
+          setC("D", row.from || "");
+          setC("E", row.to || "");
+          setC("F", row.work?.material || "");
+          setC("G", (!isM3 && qty) ? qty : "", rightV);
+          setC("H", (isM3 && qty) ? qty : "", rightV);
+          setC("I", "", rightV);
+          setC("J", price || "", rightV, "#,##0");
+          const kCell = ws.getCell("K"+r);
+          kCell.value = { formula: `IFERROR(J${r}*G${r},0)+IFERROR(J${r}*H${r},0)` };
+          kCell.font = { name:"돋움", size:10 };
+          kCell.alignment = rightV;
+          kCell.border = thinBorder;
+          kCell.numFmt = "#,##0";
         });
         grandPayoutTotal += vehiclePayoutTotal;
 
         // 합계행
         const totalRow = sortedV.length + 2;
-        "ABCDEFGHIJK".split("").forEach(c => {
+        "ABCDEFGHIJ".split("").forEach(c => {
           const cell = ws.getCell(c+totalRow);
           cell.font = { name:"돋움", size:10 };
           cell.border = thinBorder;
         });
-        ws.getCell("B"+totalRow).value = parseInt(vStartD.split("-")[1]);
-        ws.getCell("D"+totalRow).value = Number(vehicle) || vehicle;
-        const totalCell = ws.getCell("L"+totalRow);
-        totalCell.value = { formula: `SUM(L2:L${totalRow - 1})` };
+        ws.getCell("A"+totalRow).value = parseInt(vStartD.split("-")[1]);
+        ws.getCell("C"+totalRow).value = Number(vehicle) || vehicle;
+        const totalCell = ws.getCell("K"+totalRow);
+        totalCell.value = { formula: `SUM(K2:K${totalRow - 1})` };
         totalCell.font = { name:"돋움", size:10, bold:true };
         totalCell.alignment = rightV;
         totalCell.border = thinBorder;
+        totalCell.numFmt = "#,##0";
 
         // 기타비용(차감) — 엑셀에서 직접 입력하는 칸
         const etcRow = totalRow + 1;
-        ws.mergeCells(`A${etcRow}:K${etcRow}`);
+        ws.mergeCells(`A${etcRow}:J${etcRow}`);
         const etcLabelCell = ws.getCell(`A${etcRow}`);
         etcLabelCell.value = "기타비용(차감)";
         etcLabelCell.font = { name:"돋움", size:10, bold:true };
         etcLabelCell.alignment = rightV;
-        const etcValCell = ws.getCell(`L${etcRow}`);
+        const etcValCell = ws.getCell(`K${etcRow}`);
         etcValCell.value = 0;
         etcValCell.font = { name:"돋움", size:10, color: { argb: "FFCC0000" } };
         etcValCell.alignment = rightV;
@@ -2640,13 +2642,13 @@ function AdminDash({ records, vehicles, setVehicles, mappings, setMappings, onSa
 
         // 최종지급액 = 지급운반비합계 - 기타비용
         const finalRow = etcRow + 1;
-        ws.mergeCells(`A${finalRow}:K${finalRow}`);
+        ws.mergeCells(`A${finalRow}:J${finalRow}`);
         const finalLabelCell = ws.getCell(`A${finalRow}`);
         finalLabelCell.value = "최종지급액";
         finalLabelCell.font = { name:"돋움", size:11, bold:true };
         finalLabelCell.alignment = rightV;
-        const finalValCell = ws.getCell(`L${finalRow}`);
-        finalValCell.value = { formula: `L${totalRow}-L${etcRow}` };
+        const finalValCell = ws.getCell(`K${finalRow}`);
+        finalValCell.value = { formula: `K${totalRow}-K${etcRow}` };
         finalValCell.font = { name:"돋움", size:11, bold:true };
         finalValCell.alignment = rightV;
         finalValCell.border = thinBorder;
