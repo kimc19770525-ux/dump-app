@@ -2830,6 +2830,24 @@ function AdminDash({ records, vehicles, setVehicles, mappings, setMappings, onSa
       try { await window.sbRecords.upsert(updated); } catch {}
     }
     if (targets.length > 0) onRefresh();
+
+    // 지명(상차지/하차지) 변경 시, 그 지명이 걸린 단가도 같이 옮겨준다 (안 옮기면 새 이름 단가가 0으로 보임)
+    if (field === "from" || field === "to") {
+      const migrate = (priceMap) => {
+        const next = { ...priceMap };
+        Object.keys(priceMap).forEach(key => {
+          const [kFrom, kTo] = key.split("||");
+          const matches = field === "from" ? kFrom === oldName : kTo === oldName;
+          if (!matches) return;
+          const newKey = field === "from" ? `${newName}||${kTo}` : `${kFrom}||${newName}`;
+          if (next[newKey] === undefined) next[newKey] = priceMap[key];
+          delete next[key];
+        });
+        return next;
+      };
+      setPrices(prev => migrate(prev));
+      setClientPrices(prev => migrate(prev));
+    }
   };
 
   const addPrice = () => {
