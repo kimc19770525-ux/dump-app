@@ -1768,9 +1768,17 @@ function MyRecordsView({ vehicles, records, driverSettings, prices }) {
   const [pin, setPin] = useState("");
   const [unlocked, setUnlocked] = useState(false);
   const [err, setErr] = useState("");
+  const [monthOffset, setMonthOffset] = useState(0); // 0=이번달, -1=지난달, ...
 
-  const monthStart = today().slice(0,7) + "-01";
-  const monthEnd = today();
+  const baseDate = new Date();
+  baseDate.setMonth(baseDate.getMonth() + monthOffset);
+  const yyyy = baseDate.getFullYear();
+  const mm = baseDate.getMonth(); // 0-indexed
+  const monthStart = `${yyyy}-${String(mm+1).padStart(2,"0")}-01`;
+  const isCurrentMonth = monthOffset === 0;
+  const lastDay = new Date(yyyy, mm+1, 0).getDate();
+  const monthEnd = isCurrentMonth ? today() : `${yyyy}-${String(mm+1).padStart(2,"0")}-${String(lastDay).padStart(2,"0")}`;
+  const monthLabel = `${yyyy}년 ${mm+1}월`;
 
   const getPrice = (from, to) => {
     const key = `${from||""}||${to||""}`;
@@ -1792,7 +1800,7 @@ function MyRecordsView({ vehicles, records, driverSettings, prices }) {
       <div style={{ padding: "40px 20px", maxWidth: 360, margin: "0 auto" }}>
         <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 6, textAlign:"center" }}>내 실적 보기</div>
         <div style={{ fontSize: 12, color: C.muted, marginBottom: 20, textAlign:"center" }}>
-          본인 차량번호와 PIN을 입력하면 이번 달 본인 실적만 볼 수 있습니다.
+          본인 차량번호와 PIN을 입력하면 본인 실적을 월별로 볼 수 있습니다.
         </div>
         <div style={{ marginBottom: 12 }}>
           <div style={{ fontSize: 12, color: C.muted, marginBottom: 6 }}>차량번호</div>
@@ -1834,12 +1842,20 @@ function MyRecordsView({ vehicles, records, driverSettings, prices }) {
 
   return (
     <div style={{ padding: "16px" }}>
-      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom: 14 }}>
-        <div style={{ fontSize: 15, fontWeight: 700 }}>차량 {vehicle} — {monthStart.slice(0,7)}월 실적</div>
-        <button onClick={()=>{ setUnlocked(false); setPin(""); }}
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom: 10 }}>
+        <div style={{ fontSize: 15, fontWeight: 700 }}>차량 {vehicle}</div>
+        <button onClick={()=>{ setUnlocked(false); setPin(""); setMonthOffset(0); }}
           style={{ background:"transparent", border:`1px solid ${C.border}`, color:C.muted, borderRadius:8, padding:"6px 12px", fontSize:12, cursor:"pointer" }}>
           🔒 나가기
         </button>
+      </div>
+
+      <div style={{ display:"flex", alignItems:"center", justifyContent:"center", gap:14, marginBottom: 14, background:C.card2, borderRadius:10, padding:"10px 0" }}>
+        <button onClick={()=>setMonthOffset(o=>o-1)}
+          style={{ background:"transparent", border:"none", color:C.text, fontSize:18, cursor:"pointer", padding:"0 10px" }}>◀</button>
+        <div style={{ fontSize: 15, fontWeight: 700, minWidth: 100, textAlign:"center" }}>{monthLabel}</div>
+        <button onClick={()=>setMonthOffset(o=>Math.min(o+1, 0))} disabled={isCurrentMonth}
+          style={{ background:"transparent", border:"none", color: isCurrentMonth ? C.border : C.text, fontSize:18, cursor: isCurrentMonth ? "default" : "pointer", padding:"0 10px" }}>▶</button>
       </div>
 
       <div style={{ overflowX: "auto" }}>
@@ -1857,7 +1873,7 @@ function MyRecordsView({ vehicles, records, driverSettings, prices }) {
           </thead>
           <tbody>
             {rows.length === 0 ? (
-              <tr><td colSpan={7} style={{ textAlign:"center", color:C.muted, padding:"30px 0" }}>이번 달 기록이 없습니다.</td></tr>
+              <tr><td colSpan={7} style={{ textAlign:"center", color:C.muted, padding:"30px 0" }}>{monthLabel} 기록이 없습니다.</td></tr>
             ) : rows.map(r => (
               <tr key={r.id} style={{ borderBottom:`1px solid ${C.border}` }}>
                 <td style={{ padding: "8px 6px" }}>{r.date}</td>
